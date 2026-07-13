@@ -17,7 +17,7 @@ export default async function DashboardPage() {
 
   const chartData = parsed.data;
   const link = chartData[0].Link;
-  console.log(link); // Log the parsed data to verify its structure
+
   return (
     <div className="p-8 max-w-6xl mx-auto space-y-6">
       <div>
