@@ -6,7 +6,7 @@ import NasdaqTimesSqu from '@/components/NasdaqTimesSqu';
 export default async function DashboardPage() {
 
     // 1. Locate the local CSV file (placed inside src/data/Mic_on.csv)
-    const filePath = path.join(process.cwd(), 'data/Mic_on.csv');
+    const filePath = path.join(process.cwd(), 'data/Mic_On.csv');
     const fileContent = fs.readFileSync(filePath, 'utf8');
 
     // 2. Parse the CSV file string to a JavaScript array of objects
