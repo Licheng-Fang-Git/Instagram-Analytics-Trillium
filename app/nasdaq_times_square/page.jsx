@@ -1,0 +1,37 @@
+import fs from 'fs';
+import path from 'path';
+import Papa from 'papaparse';
+import NasdaqTimesSqu from '@/components/NasdaqTimesSqu';
+
+export default async function DashboardPage() {
+
+    // 1. Locate the local CSV file (placed inside src/data/Nasdaq.csv)
+    const filePath = path.join(process.cwd(), 'data/Nasdaq.csv');
+    const fileContent = fs.readFileSync(filePath, 'utf8');
+
+    // 2. Parse the CSV file string to a JavaScript array of objects
+    const parsed = Papa.parse(fileContent, {
+    header: true,
+    dynamicTyping: true, // Automatically turns string numbers into JS numbers
+    skipEmptyLines: true,
+    });
+
+    const chartData = parsed.data;
+    const link = chartData[0].Link;
+
+    console.log(chartData); // Log the parsed data to verify its structure
+    return (
+    <div className="p-8 max-w-6xl mx-auto space-y-6">
+        <div>
+        <h1 className="text-3xl font-bold tracking-tight text-gray-900">Dashboard</h1>
+        <p className="text-gray-500">Overview of application metrics pulled directly from CSV.</p>
+        </div>
+        <div className="ml-3">
+            <a href={link} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Post Link</a>
+        </div>
+
+        {/* 3. Send parsed data straight to the chart component */}
+        <NasdaqTimesSqu data={chartData} />
+    </div>
+    );
+}
