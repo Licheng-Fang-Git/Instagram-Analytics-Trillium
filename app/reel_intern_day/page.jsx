@@ -4,8 +4,8 @@ import Papa from 'papaparse';
 import InternDayReel from '@/components/InternDayReel';
 
 export default async function DashboardPage() {
-    // 1. Locate the local CSV file (placed inside src/data/Intern_day_in_the_life.csv)
-    const filePath = path.join(process.cwd(), 'data/Intern_day_in_the_life.csv');
+    // 1. Locate the local CSV file (placed inside src/data/Intern_Day_in_the_Life.csv)
+    const filePath = path.join(process.cwd(), 'data/Intern_Day_in_the_Life.csv');
     const fileContent = fs.readFileSync(filePath, 'utf8');
 
     // 2. Parse the CSV file string to a JavaScript array of objects
