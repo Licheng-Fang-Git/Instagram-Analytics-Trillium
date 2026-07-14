@@ -29,7 +29,6 @@ export default function DashboardLayout({ children }) {
           <nav className="space-y-2">
               <a href="/meet_2026_interns" className="block px-4 py-2 rounded bg-blue-5 text-blue-700 font-medium">
               Meet the 2026 Interns
-              <div className="block px-2 rounded bg-blue-5 text-blue-700 font-medium">interns2026</div>
               </a>
           </nav>
           <nav className="space-y-2">
