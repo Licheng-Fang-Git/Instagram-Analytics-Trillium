@@ -14,16 +14,19 @@ export default function DashboardLayout({ children }) {
           <nav className="space-y-2">
             <a href="/reel_intern_day" className="block px-4 py-2 rounded bg-blue-5 text-blue-700 font-medium">
               Intern Day Reel
+              <div className="block px-2 rounded bg-blue-5 text-blue-700 font-medium">ditl2026</div>
             </a>
           </nav>
           <nav className="space-y-2">
             <a href="/meet_the_mentors" className="block px-4 py-2 rounded bg-blue-5 text-blue-700 font-medium">
               Meet the Mentors
+              <div className="block px-2 rounded bg-blue-5 text-blue-700 font-medium">mentors2026</div>
             </a>
           </nav>
           <nav className="space-y-2">
             <a href="/nasdaq_times_square" className="block px-4 py-2 rounded bg-blue-5 text-blue-700 font-medium">
               Nasdaq Times Square
+              <div className="block px-2 rounded bg-blue-5 text-blue-700 font-medium">nasdaq2026</div>
             </a>
           </nav>
           <nav className="space-y-2">
@@ -34,7 +37,8 @@ export default function DashboardLayout({ children }) {
           </nav>
           <nav className="space-y-2">
             <a href="/mic_on" className="block px-4 py-2 rounded bg-blue-5 text-blue-700 font-medium">
-              Mic On 
+              Mic On
+              <div className="block px-2 rounded bg-blue-5 text-blue-700 font-medium">micon2026</div>
             </a>
           </nav>
           <nav className="space-y-2">

@@ -5,7 +5,7 @@ import MeetTheMentors from '@/components/MeetTheMentor';
 
 export default async function DashboardPage() {
   // 1. Locate the local CSV file (placed inside src/data/meet_2026_interns.csv)
-  const filePath = path.join(process.cwd(), 'data/meet_2026_interns.csv');
+  const filePath = path.join(process.cwd(), 'data/interns2026.csv');
   const fileContent = fs.readFileSync(filePath, 'utf8');
 
   // 2. Parse the CSV file string to a JavaScript array of objects
