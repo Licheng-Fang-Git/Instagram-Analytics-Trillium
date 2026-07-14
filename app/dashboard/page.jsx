@@ -1,11 +1,11 @@
 import fs from 'fs';
 import path from 'path';
 import Papa from 'papaparse';
-import AnalyticsDashboard from '@/components/AnalyticsDashboard';
+import Content from '@/components/Content';
 
 export default async function DashboardPage() {
   // 1. Locate the local CSV file (placed inside src/data/analytics_data.csv)
-  const filePath = path.join(process.cwd(), 'data/analytics_data.csv');
+  const filePath = path.join(process.cwd(), 'data/content.csv');
   const fileContent = fs.readFileSync(filePath, 'utf8');
 
   // 2. Parse the CSV file string to a JavaScript array of objects
@@ -13,6 +13,7 @@ export default async function DashboardPage() {
     header: true,
     dynamicTyping: true, // Automatically turns string numbers into JS numbers
     skipEmptyLines: true,
+    transformHeader: (header) => header.replace(/^\uFEFF/, '').trim()
   });
 
   const chartData = parsed.data;
@@ -25,7 +26,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* 3. Send parsed data straight to the chart component */}
-
+      <Content data={chartData}/>
     </div>
   );
 }
