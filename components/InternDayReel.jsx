@@ -12,7 +12,7 @@ export default function InternDayReel({ data }) {
     // 1. Extract and map columns out of your CSV data format
     const interval_start = data.map((row) => row['Interval Start']);
     const views_in_interval = data.map((row) => row['Views in Interval']);
-    const culmulative_views = data.map((row) => row['Culmulative Views']);
+    const culmulative_views = data.map((row) => row['Cumulative Views']);
     
     console.log(culmulative_views); // Log the extracted data to verify its structure
     // 2. Initialize the ECharts instance attached to our DOM node
