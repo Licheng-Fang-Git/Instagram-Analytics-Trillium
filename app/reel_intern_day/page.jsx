@@ -3,10 +3,29 @@ import path from 'path';
 import Papa from 'papaparse';
 import InternDayReel from '@/components/InternDayReel';
 
+
+async function getGoogleSheetAsCSV(sheetId, sheetName = 'Meet The Interns') {
+  // Construct the export URL pointing to the CSV export endpoint
+  const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${sheetName}`;
+  
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status}`);
+    }
+    
+    // This string contains your raw CSV data
+    const csvData = await response.text(); 
+    return csvData;
+    
+  } catch (error) {
+    console.error("Failed to fetch sheet data:", error);
+  }
+}
+
 export default async function DashboardPage() {
-    // 1. Locate the local CSV file (placed inside src/data/ditl2026.csv)
-    const filePath = path.join(process.cwd(), 'data/ditl2026.csv');
-    const fileContent = fs.readFileSync(filePath, 'utf8');
+    const SPREADSHEET_ID = '18wYFbvgo3NtOUvJt-wHQct7Pz18KoRYNaCyAm8t45R4'; 
+    const fileContent = await getGoogleSheetAsCSV(SPREADSHEET_ID, 'Day_in_the_Life');
 
     // 2. Parse the CSV file string to a JavaScript array of objects
     const parsed = Papa.parse(fileContent, {
@@ -16,6 +35,7 @@ export default async function DashboardPage() {
     });
 
     const chartData = parsed.data;
+    console.log(chartData); // Log the parsed data to verify its structure
     const link = chartData[0].Link;
 
     return (

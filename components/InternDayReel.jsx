@@ -14,7 +14,7 @@ export default function InternDayReel({ data }) {
     const views_in_interval = data.map((row) => row['Views in Interval']);
     const culmulative_views = data.map((row) => row['Cumulative Views']);
     
-    console.log(culmulative_views); // Log the extracted data to verify its structure
+    console.log(interval_start); // Log the extracted data to verify its structure
     // 2. Initialize the ECharts instance attached to our DOM node
     const chartInstance = echarts.init(chartRef.current);
 
