@@ -229,7 +229,7 @@ export default function ComparePost() {
       showSymbol: false,
       smooth: true,
       data: slot.series.cumulative,
-      lineStyle: { width: 3 },
+      lineStyle: { width: 5 },
       itemStyle: { color: LINE_COLORS[i] },
       markPoint: {
         symbol: 'pin',
@@ -298,7 +298,7 @@ export default function ComparePost() {
       showSymbol: false,
       smooth: true,
       data: slot.series.interval,
-      lineStyle: { width: 2 },
+      lineStyle: { width: 5 },
       itemStyle: { color: LINE_COLORS[i] },
     }));
 
@@ -335,7 +335,7 @@ export default function ComparePost() {
     const series = activeSlots.map((slot, i) => ({
       name: slot.selected.label,
       type: 'bar',
-      barMaxWidth: 6,
+      barMaxWidth: 3,
       data: slot.series.interval,
       itemStyle: { color: LINE_COLORS[i] },
     }));

@@ -29,7 +29,7 @@ export default function MeetTheMentors({ data }) {
         bottom: 0
       },
       grid: {
-        top: '15%',
+        top: '20%',
         left: '5%',
         right: '5%',
         bottom: '12%',
