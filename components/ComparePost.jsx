@@ -71,9 +71,9 @@ function interpolateValue(points, t) {
 // For a given post's line, find every OTHER post (from the full catalog, not
 // just the other selected slot) that went up after this one and before this
 // one's data ends — those are the "X was posted here" markers on this line.
-function getCrossPostMarks(slot, allPostDates) {
+// `ownPoints` is whichever series (cumulative or interval) the mark should sit on.
+function getCrossPostMarks(slot, allPostDates, ownPoints) {
   if (!allPostDates) return [];
-  const ownPoints = slot.series.cumulative;
   const ownStart = ownPoints[0][0];
   const ownEnd = ownPoints[ownPoints.length - 1][0];
 
@@ -232,9 +232,9 @@ export default function ComparePost() {
       lineStyle: { width: 5 },
       itemStyle: { color: LINE_COLORS[i] },
       markPoint: {
-        symbol: 'pin',
-        symbolSize: 44,
-        itemStyle: { color: LINE_COLORS[i] },
+        symbol: 'circle',
+        symbolSize: 14,
+        itemStyle: { color: 'transparent', borderColor: LINE_COLORS[i], borderWidth: 2 },
         label: { show: false },
         emphasis: {
           label: {
@@ -248,7 +248,7 @@ export default function ComparePost() {
             borderRadius: 4,
           },
         },
-        data: getCrossPostMarks(slot, allPostDates),
+        data: getCrossPostMarks(slot, allPostDates, slot.series.cumulative),
       },
     }));
 
@@ -298,8 +298,27 @@ export default function ComparePost() {
       showSymbol: false,
       smooth: true,
       data: slot.series.interval,
-      lineStyle: { width: 5 },
+      lineStyle: { width: 3 },
       itemStyle: { color: LINE_COLORS[i] },
+      markPoint: {
+        symbol: 'circle',
+        symbolSize: 14,
+        itemStyle: { color: 'transparent', borderColor: LINE_COLORS[i], borderWidth: 2 },
+        label: { show: false },
+        emphasis: {
+          label: {
+            show: true,
+            formatter: '{b}',
+            position: 'top',
+            color: '#111827',
+            fontWeight: 'bold',
+            backgroundColor: '#fff',
+            padding: 4,
+            borderRadius: 4,
+          },
+        },
+        data: getCrossPostMarks(slot, allPostDates, slot.series.interval),
+      },
     }));
 
     chart.setOption(
@@ -320,10 +339,20 @@ export default function ComparePost() {
       { notMerge: true }
     );
 
+    const handleMarkPointClick = (params) => {
+      if (params.componentType === 'markPoint' && params.data?.link) {
+        window.open(params.data.link, '_blank', 'noopener,noreferrer');
+      }
+    };
+    chart.on('click', handleMarkPointClick);
+
     const handleResize = () => chart.resize();
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [slots]);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      chart.off('click', handleMarkPointClick);
+    };
+  }, [slots, allPostDates]);
 
   useEffect(() => {
     if (!intervalBarChartRef.current) return;
