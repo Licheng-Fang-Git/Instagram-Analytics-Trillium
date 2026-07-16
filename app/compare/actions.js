@@ -44,3 +44,23 @@ export async function getPostSeries(postCode) {
 
   return { cumulative, interval };
 }
+
+// The "posted at" timestamp and Instagram link for every post, keyed by code
+// — used so a selected post's chart can mark when OTHER posts (selected or
+// not) went up, and link straight to them.
+export async function getAllPostDates() {
+  const entries = Object.entries(POST_FILES).map(([code, fileName]) => {
+    const filePath = path.join(process.cwd(), 'data', fileName);
+    const fileContent = fs.readFileSync(filePath, 'utf8');
+    const { data } = Papa.parse(fileContent, {
+      header: true,
+      dynamicTyping: true,
+      skipEmptyLines: true,
+    });
+    const postedAt = new Date(`${data[0]['Interval Start']} 2026`).getTime();
+    const link = data[0].Link?.trim() || null;
+    return [code, { postedAt, link }];
+  });
+
+  return Object.fromEntries(entries);
+}
