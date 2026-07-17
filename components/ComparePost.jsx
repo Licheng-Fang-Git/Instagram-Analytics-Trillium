@@ -99,6 +99,144 @@ function summarizeSeries(points) {
   return { peak, trough, current: points[points.length - 1] };
 }
 
+// Mean of whichever velocity points fall inside [from, to]; falls back to a
+// single interpolated reading if the window happens to contain no samples
+// (common once data thins out to 12-24hr buckets).
+function averageVelocityInWindow(velocityPoints, from, to) {
+  const inWindow = velocityPoints.filter(([t]) => t >= from && t <= to);
+  if (inWindow.length > 0) {
+    return inWindow.reduce((sum, [, v]) => sum + v, 0) / inWindow.length;
+  }
+  return interpolateValue(velocityPoints, (from + to) / 2);
+}
+
+// "Did B's launch help or hurt A?" — for each pair where one post was already
+// live when the other went up, compare the live post's velocity in the 24h
+// before vs the 24h after the launch.
+function computeCatalystImpacts(activeSlots) {
+  if (activeSlots.length < 2) return [];
+  const WINDOW_HOURS = 24;
+  const windowMs = WINDOW_HOURS * 60 * 60 * 1000;
+  const impacts = [];
+
+  const [a, b] = activeSlots;
+  [
+    { affected: a, catalyst: b },
+    { affected: b, catalyst: a },
+  ].forEach(({ affected, catalyst }) => {
+    const ownPoints = affected.series.cumulative;
+    const ownStart = ownPoints[0][0];
+    const ownEnd = ownPoints[ownPoints.length - 1][0];
+    const catalystPostedAt = catalyst.series.cumulative[0][0];
+
+    if (catalystPostedAt <= ownStart || catalystPostedAt > ownEnd) return;
+
+    const { velocity } = computeDerivatives(ownPoints);
+    if (velocity.length < 2) return;
+
+    const before = averageVelocityInWindow(velocity, catalystPostedAt - windowMs, catalystPostedAt);
+    const after = averageVelocityInWindow(velocity, catalystPostedAt, catalystPostedAt + windowMs);
+    const percentChange = before > 0 ? ((after - before) / before) * 100 : null;
+
+    impacts.push({
+      affectedLabel: affected.selected.label,
+      catalystLabel: catalyst.selected.label,
+      catalystAt: catalystPostedAt,
+      before,
+      after,
+      percentChange,
+    });
+  });
+
+  return impacts;
+}
+
+// Pearson correlation coefficient between two equal-length numeric arrays.
+function pearsonCorrelation(xs, ys) {
+  const n = xs.length;
+  const meanX = xs.reduce((s, v) => s + v, 0) / n;
+  const meanY = ys.reduce((s, v) => s + v, 0) / n;
+  let cov = 0;
+  let varX = 0;
+  let varY = 0;
+  for (let i = 0; i < n; i++) {
+    const dx = xs[i] - meanX;
+    const dy = ys[i] - meanY;
+    cov += dx * dy;
+    varX += dx * dx;
+    varY += dy * dy;
+  }
+  if (varX === 0 || varY === 0) return null;
+  return cov / Math.sqrt(varX * varY);
+}
+
+function describeCatalystImpact(percentChange) {
+  if (percentChange === null) return { verb: 'changed', color: 'text-gray-700' };
+  if (percentChange >= 10) return { verb: 'helped', color: 'text-emerald-600' };
+  if (percentChange <= -10) return { verb: 'hurt', color: 'text-red-500' };
+  return { verb: 'barely affected', color: 'text-gray-500' };
+}
+
+function describeCorrelation(r) {
+  if (r === null) return 'Not enough variation to compute';
+  const abs = Math.abs(r);
+  const strength = abs >= 0.7 ? 'Strong' : abs >= 0.4 ? 'Moderate' : abs >= 0.2 ? 'Weak' : 'Little to no';
+  const direction = r >= 0 ? 'positive' : 'negative';
+  return `${strength} ${direction} correlation`;
+}
+
+// Restricts both posts' velocity curves to the calendar window where both
+// were actually live at the same time, and correlates them over that window.
+// Returns null if their live periods never overlap.
+function computeVelocityOverlap(slotA, slotB) {
+  const velA = computeDerivatives(slotA.series.cumulative).velocity;
+  const velB = computeDerivatives(slotB.series.cumulative).velocity;
+  if (velA.length < 2 || velB.length < 2) return null;
+
+  const start = Math.max(velA[0][0], velB[0][0]);
+  const end = Math.min(velA[velA.length - 1][0], velB[velB.length - 1][0]);
+  if (start >= end) return null;
+
+  const SAMPLE_COUNT = 40;
+  const seriesA = [];
+  const seriesB = [];
+  const samplesA = [];
+  const samplesB = [];
+  for (let i = 0; i < SAMPLE_COUNT; i++) {
+    const t = start + ((end - start) * i) / (SAMPLE_COUNT - 1);
+    const vA = interpolateValue(velA, t);
+    const vB = interpolateValue(velB, t);
+    seriesA.push([t, vA]);
+    seriesB.push([t, vB]);
+    samplesA.push(vA);
+    samplesB.push(vB);
+  }
+
+  return {
+    start,
+    end,
+    seriesA,
+    seriesB,
+    correlation: pearsonCorrelation(samplesA, samplesB),
+  };
+}
+
+// "Is it still growing or dead?" — compare recent velocity to this post's own
+// peak. Thresholds are relative to its own peak, not an absolute view count,
+// so it works the same way for a post that peaked at 500/hr or 50,000/hr.
+function classifyGrowthStatus(velocityPoints) {
+  if (velocityPoints.length < 2) return null;
+  const peak = Math.max(...velocityPoints.map(([, v]) => v));
+  const tail = velocityPoints.slice(-3);
+  const recent = tail.reduce((sum, [, v]) => sum + v, 0) / tail.length;
+  if (peak <= 0) return null;
+
+  const ratio = recent / peak;
+  if (ratio < 0.05) return { label: 'Down', color: 'bg-gray-200 text-gray-600' };
+  if (ratio < 0.25) return { label: 'Slowing', color: 'bg-amber-100 text-amber-700' };
+  return { label: 'Growing', color: 'bg-emerald-100 text-emerald-700' };
+}
+
 function Stat({ label, value, sub }) {
   return (
     <div>
@@ -163,6 +301,8 @@ export default function ComparePost() {
   const cumulativeInstanceRef = useRef(null);
   const intervalChartRef = useRef(null);
   const intervalInstanceRef = useRef(null);
+  const correlationChartRef = useRef(null);
+  const correlationInstanceRef = useRef(null);
   const intervalBarChartRef = useRef(null);
   const intervalBarInstanceRef = useRef(null);
 
@@ -205,6 +345,11 @@ export default function ComparePost() {
   }
 
   const hasSelection = slots.some((slot) => slot.selected);
+  // Stable across the load: true as soon as both boxes have a post *chosen*,
+  // even before their data has fetched. Used to keep chart containers mounted
+  // continuously — unlike activeSlots below, which briefly drops out a slot
+  // every time its data is (re)loading.
+  const bothSelected = Boolean(slots[0].selected) && Boolean(slots[1].selected);
   const activeSlots = slots.filter((slot) => slot.selected && slot.series);
 
   const derivativeStats = activeSlots.map((slot) => {
@@ -213,8 +358,23 @@ export default function ComparePost() {
       slot,
       velocityStats: summarizeSeries(velocity),
       accelerationStats: summarizeSeries(acceleration),
+      growthStatus: classifyGrowthStatus(velocity),
     };
   });
+
+  const catalystImpacts = computeCatalystImpacts(activeSlots);
+  const velocityOverlap =
+    activeSlots.length === 2 ? computeVelocityOverlap(activeSlots[0], activeSlots[1]) : null;
+  // "Little to no correlation" (|r| < 0.2, same threshold as describeCorrelation)
+  // isn't worth showing — including the case where there's no overlap at all
+  // (velocityOverlap null, r effectively undefined). Catalyst Impact rides on
+  // the same gate: if the two posts' velocities don't move together at all,
+  // a single 24h before/after snapshot isn't a trustworthy signal either.
+  const hasMeaningfulCorrelation =
+    velocityOverlap !== null &&
+    velocityOverlap.correlation !== null &&
+    Math.abs(velocityOverlap.correlation) >= 0.2;
+  const showCorrelationCard = bothSelected && (activeSlots.length < 2 || hasMeaningfulCorrelation);
 
   useEffect(() => {
     if (!cumulativeChartRef.current) return;
@@ -355,6 +515,67 @@ export default function ComparePost() {
   }, [slots, allPostDates]);
 
   useEffect(() => {
+    if (!correlationChartRef.current) return;
+    // This card can now hide/reappear based on the correlation strength, so
+    // its container can genuinely unmount and remount — if the previous
+    // instance's DOM node is no longer in the document, it's stale; dispose
+    // it before creating a fresh one instead of drawing onto a detached node.
+    if (correlationInstanceRef.current && !correlationInstanceRef.current.getDom()?.isConnected) {
+      correlationInstanceRef.current.dispose();
+      correlationInstanceRef.current = null;
+    }
+    if (!correlationInstanceRef.current) {
+      correlationInstanceRef.current = echarts.init(correlationChartRef.current);
+    }
+    const chart = correlationInstanceRef.current;
+
+    const series = velocityOverlap
+      ? [
+          {
+            name: activeSlots[0].selected.label,
+            type: 'line',
+            showSymbol: false,
+            smooth: true,
+            data: velocityOverlap.seriesA,
+            lineStyle: { width: 3 },
+            itemStyle: { color: LINE_COLORS[0] },
+          },
+          {
+            name: activeSlots[1].selected.label,
+            type: 'line',
+            showSymbol: false,
+            smooth: true,
+            data: velocityOverlap.seriesB,
+            lineStyle: { width: 3 },
+            itemStyle: { color: LINE_COLORS[1] },
+          },
+        ]
+      : [];
+
+    chart.setOption(
+      {
+        tooltip: { trigger: 'axis' },
+        legend: { bottom: 0, data: series.map((s) => s.name) },
+        grid: { top: '10%', left: '5%', right: '5%', bottom: '22%', containLabel: true },
+        xAxis: {
+          type: 'time',
+          name: 'Date',
+          nameLocation: 'middle',
+          nameGap: 60,
+          axisLabel: { formatter: formatAxisDateTime, rotate: 30 },
+        },
+        yAxis: { type: 'value', name: 'Views/hr (velocity)' },
+        series,
+      },
+      { notMerge: true }
+    );
+
+    const handleResize = () => chart.resize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [slots]);
+
+  useEffect(() => {
     if (!intervalBarChartRef.current) return;
     if (!intervalBarInstanceRef.current) {
       intervalBarInstanceRef.current = echarts.init(intervalBarChartRef.current);
@@ -396,6 +617,7 @@ export default function ComparePost() {
     return () => {
       cumulativeInstanceRef.current?.dispose();
       intervalInstanceRef.current?.dispose();
+      correlationInstanceRef.current?.dispose();
       intervalBarInstanceRef.current?.dispose();
     };
   }, []);
@@ -425,7 +647,7 @@ export default function ComparePost() {
 
       {derivativeStats.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {derivativeStats.map(({ slot, velocityStats, accelerationStats }, i) => (
+          {derivativeStats.map(({ slot, velocityStats, accelerationStats, growthStatus }, i) => (
             <div
               key={slot.selected.code}
               className="bg-white p-6 rounded-xl shadow-sm border border-gray-200"
@@ -436,6 +658,13 @@ export default function ComparePost() {
                   style={{ backgroundColor: LINE_COLORS[i] }}
                 />
                 <h3 className="text-lg font-semibold text-gray-800">{slot.selected.label}</h3>
+                {growthStatus && (
+                  <span
+                    className={`ml-auto text-xs font-semibold px-2 py-1 rounded-full ${growthStatus.color}`}
+                  >
+                    {growthStatus.label}
+                  </span>
+                )}
               </div>
               {velocityStats && accelerationStats ? (
                 <div className="grid grid-cols-2 gap-x-4 gap-y-4 text-sm">
@@ -468,6 +697,38 @@ export default function ComparePost() {
         </div>
       )}
 
+      {catalystImpacts.length > 0 && hasMeaningfulCorrelation && (
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">Catalyst Impact</h2>
+          <div className="space-y-3">
+            {catalystImpacts.map((impact) => {
+              const { verb, color } = describeCatalystImpact(impact.percentChange);
+              return (
+                <div
+                  key={`${impact.affectedLabel}-${impact.catalystLabel}`}
+                  className="flex items-center justify-between text-sm border-t border-gray-100 pt-3 first:border-t-0 first:pt-0"
+                >
+                  <span className="text-gray-700">
+                    <span className="font-semibold">{impact.catalystLabel}</span>'s launch{' '}
+                    <span className={`font-semibold ${color}`}>{verb}</span>{' '}
+                    <span className="font-semibold">{impact.affectedLabel}</span>'s velocity — it
+                    went from {Math.round(impact.before).toLocaleString()} to{' '}
+                    {Math.round(impact.after).toLocaleString()} views/hr in the following 24 hours
+                    {impact.percentChange !== null && (
+                      <>
+                        {' '}
+                        (<span className={color}>{Math.round(impact.percentChange)}%</span>)
+                      </>
+                    )}
+                    , on {formatAxisDateTime(impact.catalystAt)}.
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Cumulative Views Comparison</h2>
         {hasSelection ? (
@@ -485,6 +746,26 @@ export default function ComparePost() {
           <p className="text-gray-400 text-sm">Select one or two posts above to compare.</p>
         )}
       </div>
+
+      {showCorrelationCard && (
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-800 mb-1">Velocity Correlation</h2>
+          <p className="text-sm text-gray-400 mb-4">
+            Do the two posts' growth rates move together, restricted to the window where both were
+            actually live at the same time.
+          </p>
+          {activeSlots.length < 2 ? (
+            <p className="text-gray-400 text-sm mb-3">Loading...</p>
+          ) : (
+            <p className="text-sm text-gray-700 mb-3">
+              <span className="font-semibold">r = {velocityOverlap.correlation.toFixed(2)}</span>
+              {' — '}
+              {describeCorrelation(velocityOverlap.correlation)}
+            </p>
+          )}
+          <div ref={correlationChartRef} className="w-full h-[350px]" />
+        </div>
+      )}
 
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Views per Interval (Bar Comparison)</h2>
