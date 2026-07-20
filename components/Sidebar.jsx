@@ -13,6 +13,7 @@ const JULY_POSTS = [
   { href: '/nasdaq_times_square', label: 'Nasdaq Times Square', code: 'nasdaq2026' },
   { href: '/meet_the_mentors', label: 'Meet the Mentors', code: 'mentors2026' },
   { href: '/reel_intern_day', label: 'Intern Day Reel', code: 'ditl2026' },
+  { href: '/misconceptions_reel', label: 'Misconceptions Reel', code: 'misconceptions2026' },
 ];
 
 const LINK_CLASS = 'block px-4 py-2 rounded bg-blue-5 text-blue-700 font-medium';

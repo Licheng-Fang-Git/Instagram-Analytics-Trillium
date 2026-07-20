@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as echarts from 'echarts';
 import { getPostSeries, getAllPostDates } from '@/app/compare/actions';
+import { interpolateValue, resampleToFixedBuckets, formatAxisDateTime } from '@/lib/chartAggregation';
 
 const POST_OPTIONS = [
   { code: 'ditl2026', label: 'Intern Day Reel' },
@@ -10,21 +11,13 @@ const POST_OPTIONS = [
   { code: 'mentors2026', label: 'Meet the Mentors' },
   { code: 'micon2026', label: 'Mic On' },
   { code: 'nasdaq2026', label: 'Nasdaq Times Square' },
+  { code: 'misconceptions2026', label: 'Misconceptions Reel' },
 ];
 
-const LINE_COLORS = ['#3b82f6', '#f97316'];
+const LINE_COLORS = ['#3b82f6', '#f97316', '#10b981', '#a855f7', '#ef4444', '#06b6d4', '#ec4899', '#84cc16'];
 
-// Matches the "Thu Jun 25 12:04 PM" style timestamps already used elsewhere in the app.
-function formatAxisDateTime(value) {
-  const d = new Date(value);
-  const weekday = d.toLocaleDateString('en-US', { weekday: 'short' });
-  const month = d.toLocaleDateString('en-US', { month: 'short' });
-  const day = d.getDate();
-  let hours = d.getHours();
-  const minutes = String(d.getMinutes()).padStart(2, '0');
-  const ampm = hours >= 12 ? 'PM' : 'AM';
-  hours = hours % 12 || 12;
-  return `${weekday} ${month} ${day} ${hours}:${minutes} ${ampm}`;
+function colorFor(i) {
+  return LINE_COLORS[i % LINE_COLORS.length];
 }
 
 // First derivative: views/hour between each pair of consecutive cumulative points.
@@ -51,21 +44,14 @@ function computeDerivatives(cumulativePoints) {
   return { velocity, acceleration };
 }
 
-// Linear interpolation so a cross-post mark can sit ON this line even when
-// the other post's timestamp falls between two of this post's own data points.
-function interpolateValue(points, t) {
-  if (t <= points[0][0]) return points[0][1];
-  if (t >= points[points.length - 1][0]) return points[points.length - 1][1];
-  for (let i = 1; i < points.length; i++) {
-    const [t0, v0] = points[i - 1];
-    const [t1, v1] = points[i];
-    if (t <= t1) {
-      if (t1 === t0) return v1;
-      const ratio = (t - t0) / (t1 - t0);
-      return v0 + ratio * (v1 - v0);
-    }
+// The series a chart should actually draw for this post: the raw CSV-derived
+// data by default, or a fixed-bucket resample if the user picked one from
+// this post's aggregation control.
+function getDisplaySeries(slot) {
+  if (slot.aggregation === 'raw') {
+    return { cumulative: slot.series.cumulative, interval: slot.series.interval };
   }
-  return points[points.length - 1][1];
+  return resampleToFixedBuckets(slot.series.cumulative, slot.aggregation);
 }
 
 // For a given post's line, find every OTHER post (from the full catalog, not
@@ -110,45 +96,87 @@ function averageVelocityInWindow(velocityPoints, from, to) {
   return interpolateValue(velocityPoints, (from + to) / 2);
 }
 
-// "Did B's launch help or hurt A?" — for each pair where one post was already
-// live when the other went up, compare the live post's velocity in the 24h
-// before vs the 24h after the launch.
+// Finds significant local-maximum spikes in a "views per interval" series —
+// a point counts only if it's higher than both neighbors AND well above the
+// average of the points around it, so ordinary noise doesn't get flagged.
+// Keeps only the strongest few so a spiky post doesn't flood the impact list.
+function detectSpikes(intervalPoints, { neighborhoodSize = 5, multiplier = 2, maxSpikes = 3 } = {}) {
+  const candidates = [];
+  for (let i = 1; i < intervalPoints.length - 1; i++) {
+    const [t, v] = intervalPoints[i];
+    const isLocalMax = v > intervalPoints[i - 1][1] && v > intervalPoints[i + 1][1];
+    if (!isLocalMax) continue;
+
+    const start = Math.max(0, i - neighborhoodSize);
+    const end = Math.min(intervalPoints.length, i + neighborhoodSize + 1);
+    const neighbors = intervalPoints.slice(start, end).filter((_, idx) => start + idx !== i);
+    if (!neighbors.length) continue;
+    const baseline = neighbors.reduce((sum, [, val]) => sum + val, 0) / neighbors.length;
+
+    if (baseline > 0 && v >= baseline * multiplier) {
+      candidates.push({ t, v, ratio: v / baseline });
+    }
+  }
+
+  return candidates
+    .sort((a, b) => b.ratio - a.ratio)
+    .slice(0, maxSpikes)
+    .sort((a, b) => a.t - b.t);
+}
+
+// Every notable moment in a post's timeline: when it launched, plus any big
+// spikes in its views-per-interval — each is a candidate "catalyst" that
+// might affect another post's velocity around that same time.
+function getCatalystEvents(slot) {
+  const events = [{ at: slot.series.cumulative[0][0], reason: 'launched' }];
+  detectSpikes(slot.series.interval).forEach((spike) => {
+    events.push({ at: spike.t, reason: `spiked to ${Math.round(spike.v).toLocaleString()} views/hr` });
+  });
+  return events;
+}
+
+// "Did another post's launch or a sudden spike in it help or hurt this
+// post's velocity?" For every ordered pair of selected posts, and every
+// notable event in the "catalyst" post's timeline that falls inside the
+// "affected" post's own live window, compares the affected post's velocity
+// in the 24h before vs the 24h after that event.
 function computeCatalystImpacts(activeSlots) {
   if (activeSlots.length < 2) return [];
   const WINDOW_HOURS = 24;
   const windowMs = WINDOW_HOURS * 60 * 60 * 1000;
   const impacts = [];
 
-  const [a, b] = activeSlots;
-  [
-    { affected: a, catalyst: b },
-    { affected: b, catalyst: a },
-  ].forEach(({ affected, catalyst }) => {
+  activeSlots.forEach((affected) => {
     const ownPoints = affected.series.cumulative;
     const ownStart = ownPoints[0][0];
     const ownEnd = ownPoints[ownPoints.length - 1][0];
-    const catalystPostedAt = catalyst.series.cumulative[0][0];
-
-    if (catalystPostedAt <= ownStart || catalystPostedAt > ownEnd) return;
-
     const { velocity } = computeDerivatives(ownPoints);
     if (velocity.length < 2) return;
 
-    const before = averageVelocityInWindow(velocity, catalystPostedAt - windowMs, catalystPostedAt);
-    const after = averageVelocityInWindow(velocity, catalystPostedAt, catalystPostedAt + windowMs);
-    const percentChange = before > 0 ? ((after - before) / before) * 100 : null;
+    activeSlots.forEach((catalyst) => {
+      if (catalyst === affected) return;
 
-    impacts.push({
-      affectedLabel: affected.selected.label,
-      catalystLabel: catalyst.selected.label,
-      catalystAt: catalystPostedAt,
-      before,
-      after,
-      percentChange,
+      getCatalystEvents(catalyst).forEach((event) => {
+        if (event.at <= ownStart || event.at > ownEnd) return;
+
+        const before = averageVelocityInWindow(velocity, event.at - windowMs, event.at);
+        const after = averageVelocityInWindow(velocity, event.at, event.at + windowMs);
+        const percentChange = before > 0 ? ((after - before) / before) * 100 : null;
+
+        impacts.push({
+          affectedLabel: affected.selected.label,
+          catalystLabel: catalyst.selected.label,
+          catalystAt: event.at,
+          reason: event.reason,
+          before,
+          after,
+          percentChange,
+        });
+      });
     });
   });
 
-  return impacts;
+  return impacts.sort((a, b) => a.catalystAt - b.catalystAt);
 }
 
 // Pearson correlation coefficient between two equal-length numeric arrays.
@@ -168,6 +196,10 @@ function pearsonCorrelation(xs, ys) {
   }
   if (varX === 0 || varY === 0) return null;
   return cov / Math.sqrt(varX * varY);
+}
+
+function possessive(label) {
+  return label.endsWith('s') ? `${label}'` : `${label}'s`;
 }
 
 function describeCatalystImpact(percentChange) {
@@ -221,6 +253,33 @@ function computeVelocityOverlap(slotA, slotB) {
   };
 }
 
+function pairKey(labelA, labelB) {
+  return [labelA, labelB].sort().join('__');
+}
+
+// Every unique pair among the selected posts, each with its velocity-overlap
+// correlation. Backs both the Velocity Correlation section (a chart for
+// exactly 2 posts, a ranked list for more) and which Catalyst Impact entries
+// are worth showing — a pair with little to no correlation isn't relationship
+// evidence, just noise from two curves that happen to overlap in time.
+function computePairwiseCorrelations(activeSlots) {
+  const pairs = [];
+  for (let i = 0; i < activeSlots.length; i++) {
+    for (let j = i + 1; j < activeSlots.length; j++) {
+      const overlap = computeVelocityOverlap(activeSlots[i], activeSlots[j]);
+      const hasMeaningful =
+        overlap !== null && overlap.correlation !== null && Math.abs(overlap.correlation) >= 0.2;
+      pairs.push({
+        labelA: activeSlots[i].selected.label,
+        labelB: activeSlots[j].selected.label,
+        overlap,
+        hasMeaningful,
+      });
+    }
+  }
+  return pairs;
+}
+
 // "Is it still growing or dead?" — compare recent velocity to this post's own
 // peak. Thresholds are relative to its own peak, not an absolute view count,
 // so it works the same way for a post that peaked at 500/hr or 50,000/hr.
@@ -247,31 +306,44 @@ function Stat({ label, value, sub }) {
   );
 }
 
-function PostSearchBox({ index, query, onQueryChange, onSelect, excludeCode, isSelected }) {
+function PostSearchBox({ index, query, onQueryChange, onSelect, excludeCodes, isSelected, onRemove, canRemove }) {
   const [open, setOpen] = useState(false);
 
   const matches = POST_OPTIONS.filter(
     (opt) =>
-      opt.code !== excludeCode &&
+      !excludeCodes.includes(opt.code) &&
       opt.code.toLowerCase().includes(query.trim().toLowerCase())
   );
 
   return (
     <div className="relative w-full">
-      <input
-        type="text"
-        value={query}
-        placeholder={`Search post ${index + 1}... (e.g. nasdaq2026)`}
-        className={`w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 ${
-          isSelected ? 'text-black font-bold' : 'text-gray-700 font-normal'
-        }`}
-        onChange={(e) => {
-          onQueryChange(e.target.value);
-          setOpen(true);
-        }}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 120)}
-      />
+      <div className="flex items-center gap-1">
+        <input
+          type="text"
+          value={query}
+          placeholder={`Search post ${index + 1}... (e.g. nasdaq2026)`}
+          className={`w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 ${
+            isSelected ? 'text-black font-bold' : 'text-gray-700 font-normal'
+          }`}
+          onChange={(e) => {
+            onQueryChange(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 120)}
+        />
+        {canRemove && (
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={onRemove}
+            className="shrink-0 text-gray-400 hover:text-red-500 text-lg leading-none px-1"
+            aria-label={`Remove post ${index + 1}`}
+          >
+            ×
+          </button>
+        )}
+      </div>
       {open && query.trim() && matches.length > 0 && (
         <ul className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded shadow-md max-h-48 overflow-auto">
           {matches.map((opt) => (
@@ -294,7 +366,7 @@ function PostSearchBox({ index, query, onQueryChange, onSelect, excludeCode, isS
   );
 }
 
-const EMPTY_SLOT = { query: '', selected: null, series: null };
+const EMPTY_SLOT = { query: '', selected: null, series: null, aggregation: 'raw' };
 
 export default function ComparePost() {
   const cumulativeChartRef = useRef(null);
@@ -305,14 +377,34 @@ export default function ComparePost() {
   const correlationInstanceRef = useRef(null);
   const intervalBarChartRef = useRef(null);
   const intervalBarInstanceRef = useRef(null);
+  const nextSlotId = useRef(2);
 
-  const [slots, setSlots] = useState([{ ...EMPTY_SLOT }, { ...EMPTY_SLOT }]);
+  const [slots, setSlots] = useState([
+    { id: 0, ...EMPTY_SLOT },
+    { id: 1, ...EMPTY_SLOT },
+  ]);
   const [error, setError] = useState(null);
   const [allPostDates, setAllPostDates] = useState(null);
 
   useEffect(() => {
     getAllPostDates().then(setAllPostDates).catch(() => setAllPostDates({}));
   }, []);
+
+  function addSlot() {
+    setSlots((prev) => {
+      if (prev.length >= POST_OPTIONS.length) return prev;
+      const id = nextSlotId.current++;
+      return [...prev, { id, ...EMPTY_SLOT }];
+    });
+  }
+
+  function removeSlot(index) {
+    setSlots((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)));
+  }
+
+  function handleAggregationChange(slotId, value) {
+    setSlots((prev) => prev.map((s) => (s.id === slotId ? { ...s, aggregation: value } : s)));
+  }
 
   function handleQueryChange(index, value) {
     setSlots((prev) => {
@@ -324,19 +416,22 @@ export default function ComparePost() {
 
   async function handleSelect(index, opt) {
     setError(null);
+    const slotId = slots[index]?.id;
     setSlots((prev) => {
       const next = [...prev];
-      next[index] = { query: opt.code, selected: opt, series: null };
+      next[index] = { ...next[index], query: opt.code, selected: opt, series: null };
       return next;
     });
 
     try {
       const series = await getPostSeries(opt.code);
       setSlots((prev) => {
-        // Bail out if the user picked something else while this was loading.
-        if (prev[index].selected?.code !== opt.code) return prev;
+        // Bail out if this slot was removed or changed to something else
+        // while the fetch was in flight.
+        const idx = prev.findIndex((s) => s.id === slotId);
+        if (idx === -1 || prev[idx].selected?.code !== opt.code) return prev;
         const next = [...prev];
-        next[index] = { ...next[index], series };
+        next[idx] = { ...next[idx], series };
         return next;
       });
     } catch (err) {
@@ -345,12 +440,12 @@ export default function ComparePost() {
   }
 
   const hasSelection = slots.some((slot) => slot.selected);
-  // Stable across the load: true as soon as both boxes have a post *chosen*,
-  // even before their data has fetched. Used to keep chart containers mounted
-  // continuously — unlike activeSlots below, which briefly drops out a slot
-  // every time its data is (re)loading.
-  const bothSelected = Boolean(slots[0].selected) && Boolean(slots[1].selected);
+  const selectedCount = slots.filter((slot) => slot.selected).length;
   const activeSlots = slots.filter((slot) => slot.selected && slot.series);
+  // True once at least 2 posts are picked but before all their data has
+  // loaded — used to show a stable loading state instead of flickering
+  // chart containers in and out as fetches resolve.
+  const isLoadingSelections = selectedCount >= 2 && activeSlots.length < selectedCount;
 
   const derivativeStats = activeSlots.map((slot) => {
     const { velocity, acceleration } = computeDerivatives(slot.series.cumulative);
@@ -363,18 +458,14 @@ export default function ComparePost() {
   });
 
   const catalystImpacts = computeCatalystImpacts(activeSlots);
-  const velocityOverlap =
-    activeSlots.length === 2 ? computeVelocityOverlap(activeSlots[0], activeSlots[1]) : null;
-  // "Little to no correlation" (|r| < 0.2, same threshold as describeCorrelation)
-  // isn't worth showing — including the case where there's no overlap at all
-  // (velocityOverlap null, r effectively undefined). Catalyst Impact rides on
-  // the same gate: if the two posts' velocities don't move together at all,
-  // a single 24h before/after snapshot isn't a trustworthy signal either.
-  const hasMeaningfulCorrelation =
-    velocityOverlap !== null &&
-    velocityOverlap.correlation !== null &&
-    Math.abs(velocityOverlap.correlation) >= 0.2;
-  const showCorrelationCard = bothSelected && (activeSlots.length < 2 || hasMeaningfulCorrelation);
+  const pairwiseCorrelations = computePairwiseCorrelations(activeSlots);
+  const meaningfulPairs = pairwiseCorrelations.filter((p) => p.hasMeaningful);
+  const meaningfulPairKeys = new Set(meaningfulPairs.map((p) => pairKey(p.labelA, p.labelB)));
+  const visibleCatalystImpacts = catalystImpacts.filter((impact) =>
+    meaningfulPairKeys.has(pairKey(impact.affectedLabel, impact.catalystLabel))
+  );
+  const primaryPair = activeSlots.length === 2 ? pairwiseCorrelations[0] ?? null : null;
+  const showCorrelationCard = selectedCount >= 2 && (isLoadingSelections || meaningfulPairs.length > 0);
 
   useEffect(() => {
     if (!cumulativeChartRef.current) return;
@@ -383,34 +474,37 @@ export default function ComparePost() {
     }
     const chart = cumulativeInstanceRef.current;
 
-    const series = activeSlots.map((slot, i) => ({
-      name: slot.selected.label,
-      type: 'line',
-      showSymbol: false,
-      smooth: true,
-      data: slot.series.cumulative,
-      lineStyle: { width: 5 },
-      itemStyle: { color: LINE_COLORS[i] },
-      markPoint: {
-        symbol: 'circle',
-        symbolSize: 14,
-        itemStyle: { color: 'transparent', borderColor: LINE_COLORS[i], borderWidth: 2 },
-        label: { show: false },
-        emphasis: {
-          label: {
-            show: true,
-            formatter: '{b}',
-            position: 'top',
-            color: '#111827',
-            fontWeight: 'bold',
-            backgroundColor: '#fff',
-            padding: 4,
-            borderRadius: 4,
+    const series = activeSlots.map((slot, i) => {
+      const display = getDisplaySeries(slot);
+      return {
+        name: slot.selected.label,
+        type: 'line',
+        showSymbol: false,
+        smooth: true,
+        data: display.cumulative,
+        lineStyle: { width: 3 },
+        itemStyle: { color: colorFor(i) },
+        markPoint: {
+          symbol: 'circle',
+          symbolSize: 14,
+          itemStyle: { color: 'transparent', borderColor: colorFor(i), borderWidth: 2 },
+          label: { show: false },
+          emphasis: {
+            label: {
+              show: true,
+              formatter: '{b}',
+              position: 'top',
+              color: '#111827',
+              fontWeight: 'bold',
+              backgroundColor: '#fff',
+              padding: 4,
+              borderRadius: 4,
+            },
           },
+          data: getCrossPostMarks(slot, allPostDates, display.cumulative),
         },
-        data: getCrossPostMarks(slot, allPostDates, slot.series.cumulative),
-      },
-    }));
+      };
+    });
 
     chart.setOption(
       {
@@ -452,34 +546,37 @@ export default function ComparePost() {
     }
     const chart = intervalInstanceRef.current;
 
-    const series = activeSlots.map((slot, i) => ({
-      name: slot.selected.label,
-      type: 'line',
-      showSymbol: false,
-      smooth: true,
-      data: slot.series.interval,
-      lineStyle: { width: 3 },
-      itemStyle: { color: LINE_COLORS[i] },
-      markPoint: {
-        symbol: 'circle',
-        symbolSize: 14,
-        itemStyle: { color: 'transparent', borderColor: LINE_COLORS[i], borderWidth: 2 },
-        label: { show: false },
-        emphasis: {
-          label: {
-            show: true,
-            formatter: '{b}',
-            position: 'top',
-            color: '#111827',
-            fontWeight: 'bold',
-            backgroundColor: '#fff',
-            padding: 4,
-            borderRadius: 4,
+    const series = activeSlots.map((slot, i) => {
+      const display = getDisplaySeries(slot);
+      return {
+        name: slot.selected.label,
+        type: 'line',
+        showSymbol: false,
+        smooth: true,
+        data: display.interval,
+        lineStyle: { width: 3 },
+        itemStyle: { color: colorFor(i) },
+        markPoint: {
+          symbol: 'circle',
+          symbolSize: 14,
+          itemStyle: { color: 'transparent', borderColor: colorFor(i), borderWidth: 2 },
+          label: { show: false },
+          emphasis: {
+            label: {
+              show: true,
+              formatter: '{b}',
+              position: 'top',
+              color: '#111827',
+              fontWeight: 'bold',
+              backgroundColor: '#fff',
+              padding: 4,
+              borderRadius: 4,
+            },
           },
+          data: getCrossPostMarks(slot, allPostDates, display.interval),
         },
-        data: getCrossPostMarks(slot, allPostDates, slot.series.interval),
-      },
-    }));
+      };
+    });
 
     chart.setOption(
       {
@@ -516,10 +613,11 @@ export default function ComparePost() {
 
   useEffect(() => {
     if (!correlationChartRef.current) return;
-    // This card can now hide/reappear based on the correlation strength, so
-    // its container can genuinely unmount and remount — if the previous
-    // instance's DOM node is no longer in the document, it's stale; dispose
-    // it before creating a fresh one instead of drawing onto a detached node.
+    // This card's chart only exists for the exactly-2-posts case and can
+    // hide/reappear based on the pair's correlation strength or the post
+    // count changing, so its container can genuinely unmount and remount —
+    // if the previous instance's DOM node is no longer in the document,
+    // it's stale; dispose it before creating a fresh one.
     if (correlationInstanceRef.current && !correlationInstanceRef.current.getDom()?.isConnected) {
       correlationInstanceRef.current.dispose();
       correlationInstanceRef.current = null;
@@ -529,25 +627,26 @@ export default function ComparePost() {
     }
     const chart = correlationInstanceRef.current;
 
-    const series = velocityOverlap
+    const overlap = primaryPair?.overlap;
+    const series = overlap
       ? [
           {
             name: activeSlots[0].selected.label,
             type: 'line',
             showSymbol: false,
             smooth: true,
-            data: velocityOverlap.seriesA,
+            data: overlap.seriesA,
             lineStyle: { width: 3 },
-            itemStyle: { color: LINE_COLORS[0] },
+            itemStyle: { color: colorFor(0) },
           },
           {
             name: activeSlots[1].selected.label,
             type: 'line',
             showSymbol: false,
             smooth: true,
-            data: velocityOverlap.seriesB,
+            data: overlap.seriesB,
             lineStyle: { width: 3 },
-            itemStyle: { color: LINE_COLORS[1] },
+            itemStyle: { color: colorFor(1) },
           },
         ]
       : [];
@@ -586,8 +685,8 @@ export default function ComparePost() {
       name: slot.selected.label,
       type: 'bar',
       barMaxWidth: 3,
-      data: slot.series.interval,
-      itemStyle: { color: LINE_COLORS[i] },
+      data: getDisplaySeries(slot).interval,
+      itemStyle: { color: colorFor(i) },
     }));
 
     chart.setOption(
@@ -624,39 +723,45 @@ export default function ComparePost() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row gap-4">
-        <PostSearchBox
-          index={0}
-          query={slots[0].query}
-          onQueryChange={(v) => handleQueryChange(0, v)}
-          onSelect={(opt) => handleSelect(0, opt)}
-          excludeCode={slots[1].selected?.code}
-          isSelected={Boolean(slots[0].selected)}
-        />
-        <PostSearchBox
-          index={1}
-          query={slots[1].query}
-          onQueryChange={(v) => handleQueryChange(1, v)}
-          onSelect={(opt) => handleSelect(1, opt)}
-          excludeCode={slots[0].selected?.code}
-          isSelected={Boolean(slots[1].selected)}
-        />
+      <div className="flex flex-col sm:flex-row flex-wrap gap-4">
+        {slots.map((slot, index) => (
+          <PostSearchBox
+            key={slot.id}
+            index={index}
+            query={slot.query}
+            onQueryChange={(v) => handleQueryChange(index, v)}
+            onSelect={(opt) => handleSelect(index, opt)}
+            excludeCodes={slots
+              .filter((_, i) => i !== index)
+              .map((s) => s.selected?.code)
+              .filter(Boolean)}
+            isSelected={Boolean(slot.selected)}
+            onRemove={() => removeSlot(index)}
+            canRemove={slots.length > 1}
+          />
+        ))}
+        {slots.length < POST_OPTIONS.length && (
+          <button
+            type="button"
+            onClick={addSlot}
+            className="shrink-0 px-4 py-2 rounded border border-dashed border-gray-300 text-sm text-gray-500 hover:border-blue-400 hover:text-blue-500"
+          >
+            + Add post
+          </button>
+        )}
       </div>
 
       {error && <p className="text-sm text-red-500">{error}</p>}
 
       {derivativeStats.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {derivativeStats.map(({ slot, velocityStats, accelerationStats, growthStatus }, i) => (
             <div
-              key={slot.selected.code}
+              key={slot.id}
               className="bg-white p-6 rounded-xl shadow-sm border border-gray-200"
             >
               <div className="flex items-center gap-2 mb-4">
-                <span
-                  className="w-3 h-3 rounded-full"
-                  style={{ backgroundColor: LINE_COLORS[i] }}
-                />
+                <span className="w-3 h-3 rounded-full" style={{ backgroundColor: colorFor(i) }} />
                 <h3 className="text-lg font-semibold text-gray-800">{slot.selected.label}</h3>
                 {growthStatus && (
                   <span
@@ -666,6 +771,20 @@ export default function ComparePost() {
                   </span>
                 )}
               </div>
+              <label className="flex items-center gap-2 text-xs text-gray-500 mb-4">
+                Chart buckets:
+                <select
+                  value={slot.aggregation}
+                  onChange={(e) => handleAggregationChange(slot.id, e.target.value)}
+                  className="border border-gray-200 rounded px-2 py-1 text-gray-700"
+                >
+                  <option value="raw">Raw</option>
+                  <option value="1">Every 1 hour</option>
+                  <option value="3">Every 3 hours</option>
+                  <option value="12">Every 12 hours</option>
+                  <option value="24">Every 24 hours</option>
+                </select>
+              </label>
               {velocityStats && accelerationStats ? (
                 <div className="grid grid-cols-2 gap-x-4 gap-y-4 text-sm">
                   <Stat
@@ -697,22 +816,44 @@ export default function ComparePost() {
         </div>
       )}
 
-      {catalystImpacts.length > 0 && hasMeaningfulCorrelation && (
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+        <h2 className="text-lg font-semibold text-gray-800 mb-4">Cumulative Views Comparison</h2>
+        {hasSelection ? (
+          <div ref={cumulativeChartRef} className="w-full h-[450px]" />
+        ) : (
+          <p className="text-gray-400 text-sm">Select posts above to compare.</p>
+        )}
+      </div>
+
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+        <h2 className="text-lg font-semibold text-gray-800 mb-4">Views per Interval Comparison</h2>
+        {hasSelection ? (
+          <div ref={intervalChartRef} className="w-full h-[400px]" />
+        ) : (
+          <p className="text-gray-400 text-sm">Select posts above to compare.</p>
+        )}
+      </div>
+
+      {visibleCatalystImpacts.length > 0 && (
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">Catalyst Impact</h2>
+          <h2 className="text-lg font-semibold text-gray-800 mb-1">Catalyst Impact</h2>
+          <p className="text-sm text-gray-400 mb-4">
+            Whenever a post launched or spiked, here's what happened to the other selected posts'
+            velocity in the following 24 hours.
+          </p>
           <div className="space-y-3">
-            {catalystImpacts.map((impact) => {
+            {visibleCatalystImpacts.map((impact) => {
               const { verb, color } = describeCatalystImpact(impact.percentChange);
               return (
                 <div
-                  key={`${impact.affectedLabel}-${impact.catalystLabel}`}
+                  key={`${impact.affectedLabel}-${impact.catalystLabel}-${impact.catalystAt}`}
                   className="flex items-center justify-between text-sm border-t border-gray-100 pt-3 first:border-t-0 first:pt-0"
                 >
                   <span className="text-gray-700">
-                    <span className="font-semibold">{impact.catalystLabel}</span>'s launch{' '}
-                    <span className={`font-semibold ${color}`}>{verb}</span>{' '}
-                    <span className="font-semibold">{impact.affectedLabel}</span>'s velocity — it
-                    went from {Math.round(impact.before).toLocaleString()} to{' '}
+                    <span className="font-semibold">{impact.catalystLabel}</span> {impact.reason},
+                    and it <span className={`font-semibold ${color}`}>{verb}</span>{' '}
+                    <span className="font-semibold">{possessive(impact.affectedLabel)}</span> velocity
+                    — it went from {Math.round(impact.before).toLocaleString()} to{' '}
                     {Math.round(impact.after).toLocaleString()} views/hr in the following 24 hours
                     {impact.percentChange !== null && (
                       <>
@@ -729,41 +870,44 @@ export default function ComparePost() {
         </div>
       )}
 
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Cumulative Views Comparison</h2>
-        {hasSelection ? (
-          <div ref={cumulativeChartRef} className="w-full h-[450px]" />
-        ) : (
-          <p className="text-gray-400 text-sm">Select one or two posts above to compare.</p>
-        )}
-      </div>
-
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Views per Interval Comparison</h2>
-        {hasSelection ? (
-          <div ref={intervalChartRef} className="w-full h-[400px]" />
-        ) : (
-          <p className="text-gray-400 text-sm">Select one or two posts above to compare.</p>
-        )}
-      </div>
-
       {showCorrelationCard && (
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
           <h2 className="text-lg font-semibold text-gray-800 mb-1">Velocity Correlation</h2>
           <p className="text-sm text-gray-400 mb-4">
-            Do the two posts' growth rates move together, restricted to the window where both were
-            actually live at the same time.
+            Do these posts' growth rates move together, restricted to the window where each pair
+            was actually live at the same time.
           </p>
-          {activeSlots.length < 2 ? (
-            <p className="text-gray-400 text-sm mb-3">Loading...</p>
+          {isLoadingSelections ? (
+            <p className="text-gray-400 text-sm">Loading...</p>
+          ) : activeSlots.length === 2 ? (
+            <>
+              <p className="text-sm text-gray-700 mb-3">
+                <span className="font-semibold">r = {primaryPair.overlap.correlation.toFixed(2)}</span>
+                {' — '}
+                {describeCorrelation(primaryPair.overlap.correlation)}
+              </p>
+              <div ref={correlationChartRef} className="w-full h-[350px]" />
+            </>
           ) : (
-            <p className="text-sm text-gray-700 mb-3">
-              <span className="font-semibold">r = {velocityOverlap.correlation.toFixed(2)}</span>
-              {' — '}
-              {describeCorrelation(velocityOverlap.correlation)}
-            </p>
+            <div className="space-y-2">
+              {meaningfulPairs
+                .slice()
+                .sort((a, b) => Math.abs(b.overlap.correlation) - Math.abs(a.overlap.correlation))
+                .map((pair) => (
+                  <div
+                    key={pairKey(pair.labelA, pair.labelB)}
+                    className="flex items-center justify-between text-sm border-t border-gray-100 pt-2 first:border-t-0 first:pt-0"
+                  >
+                    <span className="text-gray-700">
+                      {pair.labelA} vs {pair.labelB}
+                    </span>
+                    <span className="font-semibold text-gray-800">
+                      r = {pair.overlap.correlation.toFixed(2)} — {describeCorrelation(pair.overlap.correlation)}
+                    </span>
+                  </div>
+                ))}
+            </div>
           )}
-          <div ref={correlationChartRef} className="w-full h-[350px]" />
         </div>
       )}
 
@@ -772,7 +916,7 @@ export default function ComparePost() {
         {hasSelection ? (
           <div ref={intervalBarChartRef} className="w-full h-[400px]" />
         ) : (
-          <p className="text-gray-400 text-sm">Select one or two posts above to compare.</p>
+          <p className="text-gray-400 text-sm">Select posts above to compare.</p>
         )}
       </div>
     </div>

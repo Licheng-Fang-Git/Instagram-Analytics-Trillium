@@ -8,6 +8,7 @@ const POST_FILES = {
     mentors2026: 'Meet The Mentors',
     micon2026: 'Mic-On',
     nasdaq2026: 'Nasdaq',
+    misconceptions2026: 'Misconceptions-Reel',
 };
 
 async function getGoogleSheetAsCSV(sheetId, sheetName = 'Meet The Interns') {
