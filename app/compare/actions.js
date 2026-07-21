@@ -1,6 +1,7 @@
 'use server';
 
 import Papa from 'papaparse';
+import { normalizeRows } from '@/lib/chartAggregation';
 
 const POST_FILES = {
     ditl2026: 'Day_in_the_Life',
@@ -45,22 +46,9 @@ export async function getPostSeries(postCode) {
         skipEmptyLines: true,
     });
 
-    const originMs = new Date(`${data[0]['Interval Start']} 2026`).getTime();
-
-    const cumulative = [
-        [originMs, 0]
-    ];
-    const interval = [];
-    const interval_length = [];
-    data.forEach((row) => {
-        const endMs = new Date(`${row['Interval End']} 2026`).getTime();
-        const cumulativeViews = row['Cumulative Views'];
-        const interval_length = row['Interval Length'];
-        cumulative.push([endMs, cumulativeViews, interval_length]);
-        interval.push([endMs, row['Views in Interval']]);
-    });
-
-    return { cumulative, interval };
+    // Return compact per-row data (timestamp, native interval length, views,
+    // cumulative) so the client can re-bucket the charts to any target size.
+    return { rows: normalizeRows(data) };
 }
 
 // The "posted at" timestamp and Instagram link for every post, keyed by code

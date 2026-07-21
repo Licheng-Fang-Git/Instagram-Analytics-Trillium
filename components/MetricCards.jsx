@@ -1,15 +1,16 @@
 import React from 'react';
+import getPostMetrics from '@/app/content.js';
 
 export default function MetricCards({data}) {
   // Mock data — you can pass this in as props from your parsed CSV or API
   const metrics = [
-    { label: 'Views', value: '8,850'},
-    { label: 'Reach', value: '14,200'},
-    { label: 'Likes', value: '1,240'},
-    { label: 'Shares', value: '312'},
-    { label: 'Follows', value: '89'},
-    { label: 'Comments', value: '154'},
-    { label: 'Saves', value: '420'},
+    { label: 'Views', value: data.views },
+    { label: 'Reach', value: data.reach },
+    { label: 'Likes', value: data.likes },
+    { label: 'Shares', value: data.shares },
+    { label: 'Follows', value: data.follows },
+    { label: 'Comments', value: data.comments },
+    { label: 'Saves', value: data.saves },
   ];
 
   return (

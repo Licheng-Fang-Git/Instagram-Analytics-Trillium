@@ -2,18 +2,15 @@
 
 import { useEffect, useRef, useState } from 'react';
 import * as echarts from 'echarts';
-import { parseCsvRowsToSeries, resampleToFixedBuckets, formatAxisDateTime } from '@/lib/chartAggregation';
+import { normalizeRows, bucketByIntervalLength, formatAxisDateTime, BUCKET_OPTIONS } from '@/lib/chartAggregation';
 
 export default function MeetTheMentors({ data }) {
   const chartRef = useRef(null);
   const chartInstanceRef = useRef(null);
-  const [aggregation, setAggregation] = useState('none');
+  const [bucket, setBucket] = useState('1:00');
 
-  // Init + dispose are paired in this one mount-scoped effect, and the ref is
-  // nulled on cleanup. Without nulling, a client-side navigation (or React's
-  // dev double-mount) would leave the ref pointing at a disposed instance, and
-  // the data effect below would call setOption on a dead chart — the "blank
-  // until reload" bug.
+  // Init + dispose paired in one mount-scoped effect, nulling the ref on
+  // cleanup so a client-side navigation re-initializes cleanly.
   useEffect(() => {
     if (!chartRef.current) return;
     const chart = echarts.init(chartRef.current);
@@ -21,9 +18,14 @@ export default function MeetTheMentors({ data }) {
 
     const handleResize = () => chart.resize();
     window.addEventListener('resize', handleResize);
+    // Resize when the container itself gets/changes size — covers the case
+    // where the chart initializes before the flex layout has settled its width.
+    const ro = new ResizeObserver(() => chart.resize());
+    ro.observe(chartRef.current);
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      ro.disconnect();
       chart.dispose();
       chartInstanceRef.current = null;
     };
@@ -33,100 +35,62 @@ export default function MeetTheMentors({ data }) {
     const chart = chartInstanceRef.current;
     if (!chart || !data || !data.length) return;
 
-    // "None" = original look: one point per CSV row, evenly spaced on a
-    // category axis. "Raw" = one point per row too, but positioned by real
-    // time. A number resamples onto fixed-size time buckets.
-    const isNone = aggregation === 'none';
-    const isDense = isNone || aggregation === 'raw';
-    const parsed = parseCsvRowsToSeries(data);
-    const { cumulative, interval } =
-      aggregation === 'raw' || isNone
-        ? parsed
-        : resampleToFixedBuckets(parsed.cumulative, aggregation);
+    const rows = normalizeRows(data);
+    const { cumulative, interval } = bucketByIntervalLength(rows, bucket);
 
-    const intervalStartLabels = data.map((row) => row['Interval Start']);
-    const rawInterval = data.map((row) => row['Views in Interval']);
-    const rawCumulative = data.map((row) => row['Cumulative Views']);
-
-    const option = {
-      tooltip: { trigger: 'axis' },
-      legend: {
-        data: ['Views in Interval', 'Cumulative Views'],
-        bottom: 0,
-      },
-      grid: {
-        top: '20%',
-        left: '5%',
-        right: '5%',
-        bottom: '18%',
-        containLabel: true,
-      },
-      xAxis: isNone
-        ? {
-            type: 'category',
-            data: intervalStartLabels,
-            axisTick: { alignWithLabel: true },
-            axisLabel: { rotate: 30 },
-          }
-        : {
-            type: 'time',
-            axisLabel: { formatter: formatAxisDateTime, rotate: 30 },
+    chart.setOption(
+      {
+        tooltip: { trigger: 'axis' },
+        legend: { data: ['Views in Interval', 'Cumulative Views'], bottom: 0 },
+        grid: { top: '20%', left: '5%', right: '5%', bottom: '18%', containLabel: true },
+        xAxis: {
+          type: 'time',
+          axisLabel: { formatter: formatAxisDateTime, rotate: 30 },
+        },
+        yAxis: [
+          { type: 'value', name: 'Views in Interval', position: 'left', axisLabel: { formatter: '{value}' } },
+          { type: 'value', name: 'Cumulative Views', position: 'right' },
+        ],
+        series: [
+          {
+            name: 'Views in Interval',
+            type: 'bar',
+            data: interval,
+            itemStyle: { color: '#3b82f6' },
+            barMaxWidth: 24,
           },
-      yAxis: [
-        {
-          type: 'value',
-          name: 'Views in Interval',
-          position: 'left',
-          axisLabel: { formatter: '{value}' },
-        },
-        {
-          type: 'value',
-          name: 'Cumulative Views',
-          position: 'right',
-        },
-      ],
-      series: [
-        {
-          name: 'Views in Interval',
-          type: 'bar',
-          data: isNone ? rawInterval : interval,
-          itemStyle: { color: '#3b82f6' }, // Tailwind blue-500
-          barMaxWidth: isDense ? 8 : 30,
-        },
-        {
-          name: 'Cumulative Views',
-          type: 'line',
-          yAxisIndex: 1, // Uses the right hand Y-axis configuration
-          data: isNone ? rawCumulative : cumulative,
-          smooth: true,
-          itemStyle: { color: '#10b981' }, // Tailwind emerald-500
-          lineStyle: { width: 3 },
-        },
-      ],
-    };
-
-    // notMerge fully replaces the option so switching axis types leaves no
-    // stale config behind.
-    chart.setOption(option, { notMerge: true });
-  }, [data, aggregation]);
+          {
+            name: 'Cumulative Views',
+            type: 'line',
+            yAxisIndex: 1,
+            data: cumulative,
+            smooth: true,
+            symbolSize: 5,
+            itemStyle: { color: '#10b981' },
+            lineStyle: { width: 3 },
+          },
+        ],
+      },
+      { notMerge: true }
+    );
+  }, [data, bucket]);
 
   return (
     <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-gray-800">Financial & User Growth</h2>
         <label className="flex items-center gap-2 text-xs text-gray-500">
-          Buckets:
+          Bucket size:
           <select
-            value={aggregation}
-            onChange={(e) => setAggregation(e.target.value)}
+            value={bucket}
+            onChange={(e) => setBucket(e.target.value)}
             className="border border-gray-200 rounded px-2 py-1 text-gray-700"
           >
-            <option value="none">None</option>
-            <option value="raw">Raw</option>
-            <option value="1">Every 1 hour</option>
-            <option value="3">Every 3 hours</option>
-            <option value="12">Every 12 hours</option>
-            <option value="24">Every 24 hours</option>
+            {BUCKET_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
           </select>
         </label>
       </div>

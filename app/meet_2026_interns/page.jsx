@@ -1,8 +1,9 @@
-import fs from 'fs';
-import path from 'path';
 import Papa from 'papaparse';
 import MeetTheMentors from '@/components/MeetTheMentor';
 import MetricCards from '@/components/MetricCards';
+import InstagramEmbed from '@/components/InstagramEmbed';
+import {getPostMetrics} from '@/app/content.js';
+
 
 async function getGoogleSheetAsCSV(sheetId, sheetName = 'Meet The Interns') {
   // Construct the export URL pointing to the CSV export endpoint
@@ -23,8 +24,12 @@ async function getGoogleSheetAsCSV(sheetId, sheetName = 'Meet The Interns') {
   }
 }
 
+// Pulls live from Google Sheets on every request instead of baking data in at
+// build time — keeps the dashboard fresh and avoids build-time fetch failures.
+export const dynamic = 'force-dynamic';
+
 export default async function DashboardPage() {
-  const SPREADSHEET_ID = '18wYFbvgo3NtOUvJt-wHQct7Pz18KoRYNaCyAm8t45R4'; 
+  const SPREADSHEET_ID = '18wYFbvgo3NtOUvJt-wHQct7Pz18KoRYNaCyAm8t45R4';
   const fileContent = await getGoogleSheetAsCSV(SPREADSHEET_ID, 'Meet The Interns');
     
   // // 1. Locate the local CSV file (placed inside src/data/meet_2026_interns.csv)
@@ -39,20 +44,23 @@ export default async function DashboardPage() {
   });
 
   const chartData = parsed.data;
-  const link = chartData[0].Link;
+  const link = chartData[0]?.Link;
+
+  const postMetrics = await getPostMetrics({post_link: link});
 
   return (
     <div className="p-8 max-w-6xl mx-auto space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-gray-900">Interns 2026 Dashboard</h1>
-        <p className="text-gray-500">Overview of application metrics pulled directly from CSV.</p>
+        <h1 className="text-3xl font-bold tracking-tight text-gray-900">Meet the Interns 2026 Dashboard</h1>
       </div>
       <div className="ml-3">
         <a href={link} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Post Link</a>
       </div>
-      <MetricCards />
+      <MetricCards data={postMetrics} />
       {/* 3. Send parsed data straight to the chart component */}
       <MeetTheMentors data={chartData} />
+      <div> <InstagramEmbed url={link} /></div>
     </div>
   );
 }
+

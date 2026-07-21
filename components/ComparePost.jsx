@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as echarts from 'echarts';
 import { getPostSeries, getAllPostDates } from '@/app/compare/actions';
-import { interpolateValue, resampleToFixedBuckets, formatAxisDateTime } from '@/lib/chartAggregation';
+import { interpolateValue, formatAxisDateTime, bucketByIntervalLength, BUCKET_OPTIONS } from '@/lib/chartAggregation';
 
 const POST_OPTIONS = [
   { code: 'ditl2026', label: 'Intern Day Reel' },
@@ -20,46 +20,12 @@ function colorFor(i) {
   return LINE_COLORS[i % LINE_COLORS.length];
 }
 
-// First derivative: views/hour between each pair of consecutive cumulative points.
-// Second derivative: how much that views/hour rate itself is changing, per hour.
-function computeDerivatives(cumulativePoints) {
-  const velocity = [];
-  for (let i = 1; i < cumulativePoints.length; i++) {
-    const [t0, c0] = cumulativePoints[i - 1];
-    const [t1, c1] = cumulativePoints[i];
-    const hours = (t1 - t0) / (1000 * 60 * 60);
-    if (hours <= 0) continue;
-    velocity.push([t1, (c1 - c0) / hours]);
-  }
-
-  const acceleration = [];
-  for (let i = 1; i < velocity.length; i++) {
-    const [t0, v0] = velocity[i - 1];
-    const [t1, v1] = velocity[i];
-    const hours = (t1 - t0) / (1000 * 60 * 60);
-    if (hours <= 0) continue;
-    acceleration.push([t1, (v1 - v0) / hours]);
-  }
-
-  return { velocity, acceleration };
-}
-
-// The series a chart should actually draw for this post: the raw CSV-derived
-// data by default, or a fixed-bucket resample if the user picked one from
-// this post's aggregation control.
-function getDisplaySeries(slot) {
-  if (slot.aggregation === 'raw') {
-    return { cumulative: slot.series.cumulative, interval: slot.series.interval };
-  }
-  return resampleToFixedBuckets(slot.series.cumulative, slot.aggregation);
-}
-
 // For a given post's line, find every OTHER post (from the full catalog, not
-// just the other selected slot) that went up after this one and before this
-// one's data ends — those are the "X was posted here" markers on this line.
-// `ownPoints` is whichever series (cumulative or interval) the mark should sit on.
+// just the other selected slot) that went up after this one's first shown
+// point and before its last — those are the "X was posted here" markers.
+// `ownPoints` is whichever (already filtered) series the mark should sit on.
 function getCrossPostMarks(slot, allPostDates, ownPoints) {
-  if (!allPostDates) return [];
+  if (!allPostDates || !ownPoints.length) return [];
   const ownStart = ownPoints[0][0];
   const ownEnd = ownPoints[ownPoints.length - 1][0];
 
@@ -74,227 +40,24 @@ function getCrossPostMarks(slot, allPostDates, ownPoints) {
     }));
 }
 
-function summarizeSeries(points) {
-  if (!points.length) return null;
-  let peak = points[0];
-  let trough = points[0];
-  points.forEach((p) => {
-    if (p[1] > peak[1]) peak = p;
-    if (p[1] < trough[1]) trough = p;
-  });
-  return { peak, trough, current: points[points.length - 1] };
-}
-
-// Mean of whichever velocity points fall inside [from, to]; falls back to a
-// single interpolated reading if the window happens to contain no samples
-// (common once data thins out to 12-24hr buckets).
-function averageVelocityInWindow(velocityPoints, from, to) {
-  const inWindow = velocityPoints.filter(([t]) => t >= from && t <= to);
-  if (inWindow.length > 0) {
-    return inWindow.reduce((sum, [, v]) => sum + v, 0) / inWindow.length;
-  }
-  return interpolateValue(velocityPoints, (from + to) / 2);
-}
-
-// Finds significant local-maximum spikes in a "views per interval" series —
-// a point counts only if it's higher than both neighbors AND well above the
-// average of the points around it, so ordinary noise doesn't get flagged.
-// Keeps only the strongest few so a spiky post doesn't flood the impact list.
-function detectSpikes(intervalPoints, { neighborhoodSize = 5, multiplier = 2, maxSpikes = 3 } = {}) {
-  const candidates = [];
-  for (let i = 1; i < intervalPoints.length - 1; i++) {
-    const [t, v] = intervalPoints[i];
-    const isLocalMax = v > intervalPoints[i - 1][1] && v > intervalPoints[i + 1][1];
-    if (!isLocalMax) continue;
-
-    const start = Math.max(0, i - neighborhoodSize);
-    const end = Math.min(intervalPoints.length, i + neighborhoodSize + 1);
-    const neighbors = intervalPoints.slice(start, end).filter((_, idx) => start + idx !== i);
-    if (!neighbors.length) continue;
-    const baseline = neighbors.reduce((sum, [, val]) => sum + val, 0) / neighbors.length;
-
-    if (baseline > 0 && v >= baseline * multiplier) {
-      candidates.push({ t, v, ratio: v / baseline });
-    }
-  }
-
-  return candidates
-    .sort((a, b) => b.ratio - a.ratio)
-    .slice(0, maxSpikes)
-    .sort((a, b) => a.t - b.t);
-}
-
-// Every notable moment in a post's timeline: when it launched, plus any big
-// spikes in its views-per-interval — each is a candidate "catalyst" that
-// might affect another post's velocity around that same time.
-function getCatalystEvents(slot) {
-  const events = [{ at: slot.series.cumulative[0][0], reason: 'launched' }];
-  detectSpikes(slot.series.interval).forEach((spike) => {
-    events.push({ at: spike.t, reason: `spiked to ${Math.round(spike.v).toLocaleString()} views/hr` });
-  });
-  return events;
-}
-
-// "Did another post's launch or a sudden spike in it help or hurt this
-// post's velocity?" For every ordered pair of selected posts, and every
-// notable event in the "catalyst" post's timeline that falls inside the
-// "affected" post's own live window, compares the affected post's velocity
-// in the 24h before vs the 24h after that event.
-function computeCatalystImpacts(activeSlots) {
-  if (activeSlots.length < 2) return [];
-  const WINDOW_HOURS = 24;
-  const windowMs = WINDOW_HOURS * 60 * 60 * 1000;
-  const impacts = [];
-
-  activeSlots.forEach((affected) => {
-    const ownPoints = affected.series.cumulative;
-    const ownStart = ownPoints[0][0];
-    const ownEnd = ownPoints[ownPoints.length - 1][0];
-    const { velocity } = computeDerivatives(ownPoints);
-    if (velocity.length < 2) return;
-
-    activeSlots.forEach((catalyst) => {
-      if (catalyst === affected) return;
-
-      getCatalystEvents(catalyst).forEach((event) => {
-        if (event.at <= ownStart || event.at > ownEnd) return;
-
-        const before = averageVelocityInWindow(velocity, event.at - windowMs, event.at);
-        const after = averageVelocityInWindow(velocity, event.at, event.at + windowMs);
-        const percentChange = before > 0 ? ((after - before) / before) * 100 : null;
-
-        impacts.push({
-          affectedLabel: affected.selected.label,
-          catalystLabel: catalyst.selected.label,
-          catalystAt: event.at,
-          reason: event.reason,
-          before,
-          after,
-          percentChange,
-        });
-      });
-    });
-  });
-
-  return impacts.sort((a, b) => a.catalystAt - b.catalystAt);
-}
-
-// Pearson correlation coefficient between two equal-length numeric arrays.
-function pearsonCorrelation(xs, ys) {
-  const n = xs.length;
-  const meanX = xs.reduce((s, v) => s + v, 0) / n;
-  const meanY = ys.reduce((s, v) => s + v, 0) / n;
-  let cov = 0;
-  let varX = 0;
-  let varY = 0;
-  for (let i = 0; i < n; i++) {
-    const dx = xs[i] - meanX;
-    const dy = ys[i] - meanY;
-    cov += dx * dy;
-    varX += dx * dx;
-    varY += dy * dy;
-  }
-  if (varX === 0 || varY === 0) return null;
-  return cov / Math.sqrt(varX * varY);
-}
-
-function possessive(label) {
-  return label.endsWith('s') ? `${label}'` : `${label}'s`;
-}
-
-function describeCatalystImpact(percentChange) {
-  if (percentChange === null) return { verb: 'changed', color: 'text-gray-700' };
-  if (percentChange >= 10) return { verb: 'helped', color: 'text-emerald-600' };
-  if (percentChange <= -10) return { verb: 'hurt', color: 'text-red-500' };
-  return { verb: 'barely affected', color: 'text-gray-500' };
-}
-
-function describeCorrelation(r) {
-  if (r === null) return 'Not enough variation to compute';
-  const abs = Math.abs(r);
-  const strength = abs >= 0.7 ? 'Strong' : abs >= 0.4 ? 'Moderate' : abs >= 0.2 ? 'Weak' : 'Little to no';
-  const direction = r >= 0 ? 'positive' : 'negative';
-  return `${strength} ${direction} correlation`;
-}
-
-// Restricts both posts' velocity curves to the calendar window where both
-// were actually live at the same time, and correlates them over that window.
-// Returns null if their live periods never overlap.
-function computeVelocityOverlap(slotA, slotB) {
-  const velA = computeDerivatives(slotA.series.cumulative).velocity;
-  const velB = computeDerivatives(slotB.series.cumulative).velocity;
-  if (velA.length < 2 || velB.length < 2) return null;
-
-  const start = Math.max(velA[0][0], velB[0][0]);
-  const end = Math.min(velA[velA.length - 1][0], velB[velB.length - 1][0]);
-  if (start >= end) return null;
-
-  const SAMPLE_COUNT = 40;
-  const seriesA = [];
-  const seriesB = [];
-  const samplesA = [];
-  const samplesB = [];
-  for (let i = 0; i < SAMPLE_COUNT; i++) {
-    const t = start + ((end - start) * i) / (SAMPLE_COUNT - 1);
-    const vA = interpolateValue(velA, t);
-    const vB = interpolateValue(velB, t);
-    seriesA.push([t, vA]);
-    seriesB.push([t, vB]);
-    samplesA.push(vA);
-    samplesB.push(vB);
-  }
-
-  return {
-    start,
-    end,
-    seriesA,
-    seriesB,
-    correlation: pearsonCorrelation(samplesA, samplesB),
-  };
-}
-
-function pairKey(labelA, labelB) {
-  return [labelA, labelB].sort().join('__');
-}
-
-// Every unique pair among the selected posts, each with its velocity-overlap
-// correlation. Backs both the Velocity Correlation section (a chart for
-// exactly 2 posts, a ranked list for more) and which Catalyst Impact entries
-// are worth showing — a pair with little to no correlation isn't relationship
-// evidence, just noise from two curves that happen to overlap in time.
-function computePairwiseCorrelations(activeSlots) {
-  const pairs = [];
-  for (let i = 0; i < activeSlots.length; i++) {
-    for (let j = i + 1; j < activeSlots.length; j++) {
-      const overlap = computeVelocityOverlap(activeSlots[i], activeSlots[j]);
-      const hasMeaningful =
-        overlap !== null && overlap.correlation !== null && Math.abs(overlap.correlation) >= 0.2;
-      pairs.push({
-        labelA: activeSlots[i].selected.label,
-        labelB: activeSlots[j].selected.label,
-        overlap,
-        hasMeaningful,
-      });
-    }
-  }
-  return pairs;
-}
-
-// "Is it still growing or dead?" — compare recent velocity to this post's own
-// peak. Thresholds are relative to its own peak, not an absolute view count,
-// so it works the same way for a post that peaked at 500/hr or 50,000/hr.
-function classifyGrowthStatus(velocityPoints) {
-  if (velocityPoints.length < 2) return null;
-  const peak = Math.max(...velocityPoints.map(([, v]) => v));
-  const tail = velocityPoints.slice(-3);
-  const recent = tail.reduce((sum, [, v]) => sum + v, 0) / tail.length;
-  if (peak <= 0) return null;
-
-  const ratio = recent / peak;
-  if (ratio < 0.05) return { label: 'Down', color: 'bg-gray-200 text-gray-600' };
-  if (ratio < 0.25) return { label: 'Slowing', color: 'bg-amber-100 text-amber-700' };
-  return { label: 'Growing', color: 'bg-emerald-100 text-emerald-700' };
-}
+const MARK_POINT = (color) => ({
+  symbol: 'circle',
+  symbolSize: 6,
+  itemStyle: { color: 'transparent', borderColor: color, borderWidth: 2 },
+  label: { show: false },
+  emphasis: {
+    label: {
+      show: true,
+      formatter: '{b}',
+      position: 'top',
+      color: '#111827',
+      fontWeight: 'bold',
+      backgroundColor: '#fff',
+      padding: 4,
+      borderRadius: 4,
+    },
+  },
+});
 
 function PostSearchBox({ index, query, onQueryChange, onSelect, excludeCodes, isSelected, onRemove, canRemove }) {
   const [open, setOpen] = useState(false);
@@ -356,15 +119,13 @@ function PostSearchBox({ index, query, onQueryChange, onSelect, excludeCodes, is
   );
 }
 
-const EMPTY_SLOT = { query: '', selected: null, series: null, aggregation: 'raw' };
+const EMPTY_SLOT = { query: '', selected: null, series: null };
 
 export default function ComparePost() {
   const cumulativeChartRef = useRef(null);
   const cumulativeInstanceRef = useRef(null);
   const intervalChartRef = useRef(null);
   const intervalInstanceRef = useRef(null);
-  const correlationChartRef = useRef(null);
-  const correlationInstanceRef = useRef(null);
   const intervalBarChartRef = useRef(null);
   const intervalBarInstanceRef = useRef(null);
   const nextSlotId = useRef(2);
@@ -375,6 +136,7 @@ export default function ComparePost() {
   ]);
   const [error, setError] = useState(null);
   const [allPostDates, setAllPostDates] = useState(null);
+  const [bucket, setBucket] = useState('1:00');
 
   useEffect(() => {
     getAllPostDates().then(setAllPostDates).catch(() => setAllPostDates({}));
@@ -390,12 +152,6 @@ export default function ComparePost() {
 
   function removeSlot(index) {
     setSlots((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)));
-  }
-
-  function handleAggregationChange(slotId, value) {
-    console.log(slots)
-    setSlots((prev) => prev.map((s) => (s.id === slotId ? { ...s, aggregation: value } : s)));
-    console.log(slots);
   }
 
   function handleQueryChange(index, value) {
@@ -432,32 +188,7 @@ export default function ComparePost() {
   }
 
   const hasSelection = slots.some((slot) => slot.selected);
-  const selectedCount = slots.filter((slot) => slot.selected).length;
   const activeSlots = slots.filter((slot) => slot.selected && slot.series);
-  // True once at least 2 posts are picked but before all their data has
-  // loaded — used to show a stable loading state instead of flickering
-  // chart containers in and out as fetches resolve.
-  const isLoadingSelections = selectedCount >= 2 && activeSlots.length < selectedCount;
-
-  const derivativeStats = activeSlots.map((slot) => {
-    const { velocity, acceleration } = computeDerivatives(slot.series.cumulative);
-    return {
-      slot,
-      velocityStats: summarizeSeries(velocity),
-      accelerationStats: summarizeSeries(acceleration),
-      growthStatus: classifyGrowthStatus(velocity),
-    };
-  });
-
-  const catalystImpacts = computeCatalystImpacts(activeSlots);
-  const pairwiseCorrelations = computePairwiseCorrelations(activeSlots);
-  const meaningfulPairs = pairwiseCorrelations.filter((p) => p.hasMeaningful);
-  const meaningfulPairKeys = new Set(meaningfulPairs.map((p) => pairKey(p.labelA, p.labelB)));
-  const visibleCatalystImpacts = catalystImpacts.filter((impact) =>
-    meaningfulPairKeys.has(pairKey(impact.affectedLabel, impact.catalystLabel))
-  );
-  const primaryPair = activeSlots.length === 2 ? pairwiseCorrelations[0] ?? null : null;
-  const showCorrelationCard = selectedCount >= 2 && (isLoadingSelections || meaningfulPairs.length > 0);
 
   useEffect(() => {
     if (!cumulativeChartRef.current) return;
@@ -467,33 +198,18 @@ export default function ComparePost() {
     const chart = cumulativeInstanceRef.current;
 
     const series = activeSlots.map((slot, i) => {
-      const display = getDisplaySeries(slot);
+      const filtered = bucketByIntervalLength(slot.series.rows, bucket);
       return {
         name: slot.selected.label,
         type: 'line',
         showSymbol: false,
         smooth: true,
-        data: display.cumulative,
+        data: filtered.cumulative,
         lineStyle: { width: 3 },
         itemStyle: { color: colorFor(i) },
         markPoint: {
-          symbol: 'circle',
-          symbolSize: 10,
-          itemStyle: { color: 'transparent', borderColor: colorFor(i), borderWidth: 2 },
-          label: { show: false },
-          emphasis: {
-            label: {
-              show: true,
-              formatter: '{b}',
-              position: 'top',
-              color: '#111827',
-              fontWeight: 'bold',
-              backgroundColor: '#fff',
-              padding: 4,
-              borderRadius: 4,
-            },
-          },
-          data: getCrossPostMarks(slot, allPostDates, display.cumulative),
+          ...MARK_POINT(colorFor(i)),
+          data: getCrossPostMarks(slot, allPostDates, filtered.cumulative),
         },
       };
     });
@@ -529,7 +245,7 @@ export default function ComparePost() {
       window.removeEventListener('resize', handleResize);
       chart.off('click', handleMarkPointClick);
     };
-  }, [slots, allPostDates]);
+  }, [slots, allPostDates, bucket]);
 
   useEffect(() => {
     if (!intervalChartRef.current) return;
@@ -539,33 +255,18 @@ export default function ComparePost() {
     const chart = intervalInstanceRef.current;
 
     const series = activeSlots.map((slot, i) => {
-      const display = getDisplaySeries(slot);
+      const filtered = bucketByIntervalLength(slot.series.rows, bucket);
       return {
         name: slot.selected.label,
         type: 'line',
         showSymbol: false,
         smooth: true,
-        data: display.interval,
+        data: filtered.interval,
         lineStyle: { width: 3 },
         itemStyle: { color: colorFor(i) },
         markPoint: {
-          symbol: 'circle',
-          symbolSize: 10,
-          itemStyle: { color: 'transparent', borderColor: colorFor(i), borderWidth: 2 },
-          label: { show: false },
-          emphasis: {
-            label: {
-              show: true,
-              formatter: '{b}',
-              position: 'top',
-              color: '#111827',
-              fontWeight: 'bold',
-              backgroundColor: '#fff',
-              padding: 4,
-              borderRadius: 4,
-            },
-          },
-          data: getCrossPostMarks(slot, allPostDates, display.interval),
+          ...MARK_POINT(colorFor(i)),
+          data: getCrossPostMarks(slot, allPostDates, filtered.interval),
         },
       };
     });
@@ -601,7 +302,7 @@ export default function ComparePost() {
       window.removeEventListener('resize', handleResize);
       chart.off('click', handleMarkPointClick);
     };
-  }, [slots, allPostDates]);
+  }, [slots, allPostDates, bucket]);
 
   useEffect(() => {
     if (!intervalBarChartRef.current) return;
@@ -613,8 +314,8 @@ export default function ComparePost() {
     const series = activeSlots.map((slot, i) => ({
       name: slot.selected.label,
       type: 'bar',
-      barMaxWidth: 3,
-      data: getDisplaySeries(slot).interval,
+      barMaxWidth: 12,
+      data: bucketByIntervalLength(slot.series.rows, bucket).interval,
       itemStyle: { color: colorFor(i) },
     }));
 
@@ -639,13 +340,12 @@ export default function ComparePost() {
     const handleResize = () => chart.resize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [slots]);
+  }, [slots, bucket]);
 
   useEffect(() => {
     return () => {
       cumulativeInstanceRef.current?.dispose();
       intervalInstanceRef.current?.dispose();
-      correlationInstanceRef.current?.dispose();
       intervalBarInstanceRef.current?.dispose();
     };
   }, []);
@@ -682,43 +382,23 @@ export default function ComparePost() {
 
       {error && <p className="text-sm text-red-500">{error}</p>}
 
-      {derivativeStats.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {derivativeStats.map(({ slot, velocityStats, accelerationStats, growthStatus }, i) => (
-            <div
-              key={slot.id}
-              className="bg-white p-6 rounded-xl shadow-sm border border-gray-200"
-            >
-              <div className="flex items-center gap-2 mb-4">
-                <span className="w-3 h-3 rounded-full" style={{ backgroundColor: colorFor(i) }} />
-                <h3 className="text-lg font-semibold text-gray-800">{slot.selected.label}</h3>
-                {growthStatus && (
-                  <span
-                    className={`ml-auto text-xs font-semibold px-2 py-1 rounded-full ${growthStatus.color}`}
-                  >
-                    {growthStatus.label}
-                  </span>
-                )}
-              </div>
-              <label className="flex items-center gap-2 text-xs text-gray-500 mb-4">
-                Chart buckets:
-                <select
-                  value={slot.aggregation}
-                  onChange={(e) => handleAggregationChange(slot.id, e.target.value)}
-                  className="border border-gray-200 rounded px-2 py-1 text-gray-700"
-                >
-                  <option value="raw">Raw</option>
-                  <option value="1">Every 15 minutes</option>
-                  <option value="3">Every 30 minutes</option>
-                  <option value="12">Every 1 hour</option>
-                  <option value="12">Every 3 hours</option>
-                  <option value="12">Every 6 hours</option>
-                  <option value="12">Every 12 hours</option>
-                  <option value="24">Every 24 hours</option>
-                </select>
-              </label>
-            </div>
-          ))}
+      {hasSelection && (
+        <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600">
+          <span className="font-medium">Bucket size:</span>
+          <select
+            value={bucket}
+            onChange={(e) => setBucket(e.target.value)}
+            className="border border-gray-200 rounded px-2 py-1 text-gray-700"
+          >
+            {BUCKET_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <span className="text-gray-400 text-xs">
+            combines rows into buckets of this size, up to where the data's own granularity reaches it
+          </span>
         </div>
       )}
 
