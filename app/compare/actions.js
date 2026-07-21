@@ -51,10 +51,12 @@ export async function getPostSeries(postCode) {
         [originMs, 0]
     ];
     const interval = [];
+    const interval_length = [];
     data.forEach((row) => {
         const endMs = new Date(`${row['Interval End']} 2026`).getTime();
         const cumulativeViews = row['Cumulative Views'];
-        cumulative.push([endMs, cumulativeViews]);
+        const interval_length = row['Interval Length'];
+        cumulative.push([endMs, cumulativeViews, interval_length]);
         interval.push([endMs, row['Views in Interval']]);
     });
 
@@ -66,21 +68,21 @@ export async function getPostSeries(postCode) {
 // not) went up, and link straight to them. Pulls from the same Google Sheet
 // as getPostSeries now, so it stays live instead of reading stale local CSVs.
 export async function getAllPostDates() {
-  const SPREADSHEET_ID = '18wYFbvgo3NtOUvJt-wHQct7Pz18KoRYNaCyAm8t45R4';
+    const SPREADSHEET_ID = '18wYFbvgo3NtOUvJt-wHQct7Pz18KoRYNaCyAm8t45R4';
 
-  const entries = await Promise.all(
-    Object.entries(POST_FILES).map(async ([code, sheetName]) => {
-      const fileContent = await getGoogleSheetAsCSV(SPREADSHEET_ID, sheetName);
-      const { data } = Papa.parse(fileContent, {
-        header: true,
-        dynamicTyping: true,
-        skipEmptyLines: true,
-      });
-      const postedAt = new Date(`${data[0]['Interval Start']} 2026`).getTime();
-      const link = data[0].Link?.trim() || null;
-      return [code, { postedAt, link }];
-    })
-  );
+    const entries = await Promise.all(
+        Object.entries(POST_FILES).map(async([code, sheetName]) => {
+            const fileContent = await getGoogleSheetAsCSV(SPREADSHEET_ID, sheetName);
+            const { data } = Papa.parse(fileContent, {
+                header: true,
+                dynamicTyping: true,
+                skipEmptyLines: true,
+            });
+            const postedAt = new Date(`${data[0]['Interval Start']} 2026`).getTime();
+            const link = data[0].Link ? .trim() || null;
+            return [code, { postedAt, link }];
+        })
+    );
 
-  return Object.fromEntries(entries);
+    return Object.fromEntries(entries);
 }

@@ -296,16 +296,6 @@ function classifyGrowthStatus(velocityPoints) {
   return { label: 'Growing', color: 'bg-emerald-100 text-emerald-700' };
 }
 
-function Stat({ label, value, sub }) {
-  return (
-    <div>
-      <p className="text-xs text-gray-400 uppercase tracking-wide">{label}</p>
-      <p className="font-semibold text-gray-800">{value}</p>
-      {sub && <p className="text-xs text-gray-400">{sub}</p>}
-    </div>
-  );
-}
-
 function PostSearchBox({ index, query, onQueryChange, onSelect, excludeCodes, isSelected, onRemove, canRemove }) {
   const [open, setOpen] = useState(false);
 
@@ -403,7 +393,9 @@ export default function ComparePost() {
   }
 
   function handleAggregationChange(slotId, value) {
+    console.log(slots)
     setSlots((prev) => prev.map((s) => (s.id === slotId ? { ...s, aggregation: value } : s)));
+    console.log(slots);
   }
 
   function handleQueryChange(index, value) {
@@ -486,7 +478,7 @@ export default function ComparePost() {
         itemStyle: { color: colorFor(i) },
         markPoint: {
           symbol: 'circle',
-          symbolSize: 14,
+          symbolSize: 10,
           itemStyle: { color: 'transparent', borderColor: colorFor(i), borderWidth: 2 },
           label: { show: false },
           emphasis: {
@@ -558,7 +550,7 @@ export default function ComparePost() {
         itemStyle: { color: colorFor(i) },
         markPoint: {
           symbol: 'circle',
-          symbolSize: 14,
+          symbolSize: 10,
           itemStyle: { color: 'transparent', borderColor: colorFor(i), borderWidth: 2 },
           label: { show: false },
           emphasis: {
@@ -610,69 +602,6 @@ export default function ComparePost() {
       chart.off('click', handleMarkPointClick);
     };
   }, [slots, allPostDates]);
-
-  useEffect(() => {
-    if (!correlationChartRef.current) return;
-    // This card's chart only exists for the exactly-2-posts case and can
-    // hide/reappear based on the pair's correlation strength or the post
-    // count changing, so its container can genuinely unmount and remount —
-    // if the previous instance's DOM node is no longer in the document,
-    // it's stale; dispose it before creating a fresh one.
-    if (correlationInstanceRef.current && !correlationInstanceRef.current.getDom()?.isConnected) {
-      correlationInstanceRef.current.dispose();
-      correlationInstanceRef.current = null;
-    }
-    if (!correlationInstanceRef.current) {
-      correlationInstanceRef.current = echarts.init(correlationChartRef.current);
-    }
-    const chart = correlationInstanceRef.current;
-
-    const overlap = primaryPair?.overlap;
-    const series = overlap
-      ? [
-          {
-            name: activeSlots[0].selected.label,
-            type: 'line',
-            showSymbol: false,
-            smooth: true,
-            data: overlap.seriesA,
-            lineStyle: { width: 3 },
-            itemStyle: { color: colorFor(0) },
-          },
-          {
-            name: activeSlots[1].selected.label,
-            type: 'line',
-            showSymbol: false,
-            smooth: true,
-            data: overlap.seriesB,
-            lineStyle: { width: 3 },
-            itemStyle: { color: colorFor(1) },
-          },
-        ]
-      : [];
-
-    chart.setOption(
-      {
-        tooltip: { trigger: 'axis' },
-        legend: { bottom: 0, data: series.map((s) => s.name) },
-        grid: { top: '10%', left: '5%', right: '5%', bottom: '22%', containLabel: true },
-        xAxis: {
-          type: 'time',
-          name: 'Date',
-          nameLocation: 'middle',
-          nameGap: 60,
-          axisLabel: { formatter: formatAxisDateTime, rotate: 30 },
-        },
-        yAxis: { type: 'value', name: 'Views/hr (velocity)' },
-        series,
-      },
-      { notMerge: true }
-    );
-
-    const handleResize = () => chart.resize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [slots]);
 
   useEffect(() => {
     if (!intervalBarChartRef.current) return;
@@ -779,38 +708,15 @@ export default function ComparePost() {
                   className="border border-gray-200 rounded px-2 py-1 text-gray-700"
                 >
                   <option value="raw">Raw</option>
-                  <option value="1">Every 1 hour</option>
-                  <option value="3">Every 3 hours</option>
+                  <option value="1">Every 15 minutes</option>
+                  <option value="3">Every 30 minutes</option>
+                  <option value="12">Every 1 hour</option>
+                  <option value="12">Every 3 hours</option>
+                  <option value="12">Every 6 hours</option>
                   <option value="12">Every 12 hours</option>
                   <option value="24">Every 24 hours</option>
                 </select>
               </label>
-              {velocityStats && accelerationStats ? (
-                <div className="grid grid-cols-2 gap-x-4 gap-y-4 text-sm">
-                  <Stat
-                    label="Peak Velocity"
-                    value={`${Math.round(velocityStats.peak[1]).toLocaleString()} views/hr`}
-                    sub={formatAxisDateTime(velocityStats.peak[0])}
-                  />
-                  <Stat
-                    label="Current Velocity"
-                    value={`${Math.round(velocityStats.current[1]).toLocaleString()} views/hr`}
-                    sub="most recent interval"
-                  />
-                  <Stat
-                    label="Peak Acceleration"
-                    value={`+${Math.round(accelerationStats.peak[1]).toLocaleString()} views/hr²`}
-                    sub={formatAxisDateTime(accelerationStats.peak[0])}
-                  />
-                  <Stat
-                    label="Peak Deceleration"
-                    value={`${Math.round(accelerationStats.trough[1]).toLocaleString()} views/hr²`}
-                    sub={formatAxisDateTime(accelerationStats.trough[0])}
-                  />
-                </div>
-              ) : (
-                <p className="text-gray-400 text-sm">Not enough data points to compute derivatives.</p>
-              )}
             </div>
           ))}
         </div>
@@ -833,83 +739,6 @@ export default function ComparePost() {
           <p className="text-gray-400 text-sm">Select posts above to compare.</p>
         )}
       </div>
-
-      {visibleCatalystImpacts.length > 0 && (
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-800 mb-1">Catalyst Impact</h2>
-          <p className="text-sm text-gray-400 mb-4">
-            Whenever a post launched or spiked, here's what happened to the other selected posts'
-            velocity in the following 24 hours.
-          </p>
-          <div className="space-y-3">
-            {visibleCatalystImpacts.map((impact) => {
-              const { verb, color } = describeCatalystImpact(impact.percentChange);
-              return (
-                <div
-                  key={`${impact.affectedLabel}-${impact.catalystLabel}-${impact.catalystAt}`}
-                  className="flex items-center justify-between text-sm border-t border-gray-100 pt-3 first:border-t-0 first:pt-0"
-                >
-                  <span className="text-gray-700">
-                    <span className="font-semibold">{impact.catalystLabel}</span> {impact.reason},
-                    and it <span className={`font-semibold ${color}`}>{verb}</span>{' '}
-                    <span className="font-semibold">{possessive(impact.affectedLabel)}</span> velocity
-                    — it went from {Math.round(impact.before).toLocaleString()} to{' '}
-                    {Math.round(impact.after).toLocaleString()} views/hr in the following 24 hours
-                    {impact.percentChange !== null && (
-                      <>
-                        {' '}
-                        (<span className={color}>{Math.round(impact.percentChange)}%</span>)
-                      </>
-                    )}
-                    , on {formatAxisDateTime(impact.catalystAt)}.
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {showCorrelationCard && (
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-800 mb-1">Velocity Correlation</h2>
-          <p className="text-sm text-gray-400 mb-4">
-            Do these posts' growth rates move together, restricted to the window where each pair
-            was actually live at the same time.
-          </p>
-          {isLoadingSelections ? (
-            <p className="text-gray-400 text-sm">Loading...</p>
-          ) : activeSlots.length === 2 ? (
-            <>
-              <p className="text-sm text-gray-700 mb-3">
-                <span className="font-semibold">r = {primaryPair.overlap.correlation.toFixed(2)}</span>
-                {' — '}
-                {describeCorrelation(primaryPair.overlap.correlation)}
-              </p>
-              <div ref={correlationChartRef} className="w-full h-[350px]" />
-            </>
-          ) : (
-            <div className="space-y-2">
-              {meaningfulPairs
-                .slice()
-                .sort((a, b) => Math.abs(b.overlap.correlation) - Math.abs(a.overlap.correlation))
-                .map((pair) => (
-                  <div
-                    key={pairKey(pair.labelA, pair.labelB)}
-                    className="flex items-center justify-between text-sm border-t border-gray-100 pt-2 first:border-t-0 first:pt-0"
-                  >
-                    <span className="text-gray-700">
-                      {pair.labelA} vs {pair.labelB}
-                    </span>
-                    <span className="font-semibold text-gray-800">
-                      r = {pair.overlap.correlation.toFixed(2)} — {describeCorrelation(pair.overlap.correlation)}
-                    </span>
-                  </div>
-                ))}
-            </div>
-          )}
-        </div>
-      )}
 
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Views per Interval (Bar Comparison)</h2>

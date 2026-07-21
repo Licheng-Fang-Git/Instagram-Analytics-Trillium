@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import Papa from 'papaparse';
 import MeetTheMentors from '@/components/MeetTheMentor';
+import MetricCards from '@/components/MetricCards';
 
 async function getGoogleSheetAsCSV(sheetId, sheetName = 'Meet The Interns') {
   // Construct the export URL pointing to the CSV export endpoint
@@ -49,7 +50,7 @@ export default async function DashboardPage() {
       <div className="ml-3">
         <a href={link} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Post Link</a>
       </div>
-
+      <MetricCards />
       {/* 3. Send parsed data straight to the chart component */}
       <MeetTheMentors data={chartData} />
     </div>
