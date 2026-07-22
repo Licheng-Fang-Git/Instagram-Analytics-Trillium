@@ -20,6 +20,21 @@ function colorFor(i) {
   return LINE_COLORS[i % LINE_COLORS.length];
 }
 
+// The series a post's charts should draw for the chosen bucket. "None" means
+// no bucketing — plot every raw row as-is. Unlike the single-post pages
+// (which use a category axis for "None"), the compare charts stay on the
+// shared time axis so multiple posts with different timelines still line up,
+// so raw rows become [timestamp, value] points here.
+function seriesForBucket(rows, bucket) {
+  if (bucket === 'none') {
+    return {
+      cumulative: rows.map((r) => [r.tEnd, r.cumulative]),
+      interval: rows.map((r) => [r.tEnd, r.views]),
+    };
+  }
+  return bucketByIntervalLength(rows, bucket);
+}
+
 // For a given post's line, find every OTHER post (from the full catalog, not
 // just the other selected slot) that went up after this one's first shown
 // point and before its last — those are the "X was posted here" markers.
@@ -198,7 +213,7 @@ export default function ComparePost() {
     const chart = cumulativeInstanceRef.current;
 
     const series = activeSlots.map((slot, i) => {
-      const filtered = bucketByIntervalLength(slot.series.rows, bucket);
+      const filtered = seriesForBucket(slot.series.rows, bucket);
       return {
         name: slot.selected.label,
         type: 'line',
@@ -255,7 +270,7 @@ export default function ComparePost() {
     const chart = intervalInstanceRef.current;
 
     const series = activeSlots.map((slot, i) => {
-      const filtered = bucketByIntervalLength(slot.series.rows, bucket);
+      const filtered = seriesForBucket(slot.series.rows, bucket);
       return {
         name: slot.selected.label,
         type: 'line',
@@ -315,7 +330,7 @@ export default function ComparePost() {
       name: slot.selected.label,
       type: 'bar',
       barMaxWidth: 12,
-      data: bucketByIntervalLength(slot.series.rows, bucket).interval,
+      data: seriesForBucket(slot.series.rows, bucket).interval,
       itemStyle: { color: colorFor(i) },
     }));
 

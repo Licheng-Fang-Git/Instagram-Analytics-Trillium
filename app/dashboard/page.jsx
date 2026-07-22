@@ -1,19 +1,38 @@
 import fs from 'fs';
 import path from 'path';
 import Papa from 'papaparse';
-import Content from '@/components/Content';
+import OverviewCharts from '@/components/OverviewCharts';
+
+async function getGoogleSheetAsCSV(sheetId, sheetName = 'Meet The Interns') {
+  // Construct the export URL pointing to the CSV export endpoint
+  const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${sheetName}`;
+  
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status}`);
+    }
+    
+    // This string contains your raw CSV data
+    const csvData = await response.text(); 
+    return csvData;
+    
+  } catch (error) {
+    console.error("Failed to fetch sheet data:", error);
+  }
+}
+
 
 export default async function DashboardPage() {
   // 1. Locate the local CSV file (placed inside src/data/analytics_data.csv)
-  const filePath = path.join(process.cwd(), 'data/content.csv');
-  const fileContent = fs.readFileSync(filePath, 'utf8');
+  const SPREADSHEET_ID = '18wYFbvgo3NtOUvJt-wHQct7Pz18KoRYNaCyAm8t45R4';
+  const fileContent = await getGoogleSheetAsCSV(SPREADSHEET_ID, 'Overview');
 
   // 2. Parse the CSV file string to a JavaScript array of objects
   const parsed = Papa.parse(fileContent, {
     header: true,
     dynamicTyping: true, // Automatically turns string numbers into JS numbers
     skipEmptyLines: true,
-    transformHeader: (header) => header.replace(/^\uFEFF/, '').trim()
   });
 
   const chartData = parsed.data;
@@ -23,10 +42,8 @@ export default async function DashboardPage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-gray-900">Dashboard</h1>
         <p className="text-gray-500">Overview of application metrics pulled directly from CSV.</p>
+        <OverviewCharts data={chartData}/>
       </div>
-
-      {/* 3. Send parsed data straight to the chart component */}
-      <Content data={chartData}/>
     </div>
   );
 }
