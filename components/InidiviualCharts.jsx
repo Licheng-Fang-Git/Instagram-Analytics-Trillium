@@ -5,9 +5,10 @@ import * as echarts from 'echarts';
 import { normalizeRows, bucketByIntervalLength, formatAxisDateTime, BUCKET_OPTIONS } from '@/lib/chartAggregation';
 
 export default function InidiviualCharts({ data }) {
+  const ASSUMED_YEAR = 2026;
   const chartRef = useRef(null);
   const chartInstanceRef = useRef(null);
-  const [bucket, setBucket] = useState('1:00');
+  const [bucket, setBucket] = useState('none');
 
   // Init + dispose paired in one mount-scoped effect, nulling the ref on
   // cleanup so a client-side navigation re-initializes cleanly.
@@ -34,9 +35,27 @@ export default function InidiviualCharts({ data }) {
   useEffect(() => {
     const chart = chartInstanceRef.current;
     if (!chart || !data || !data.length) return;
+    let raw_cumulative = [];
+    let raw_interval = [];
+    let timeEnds = [];
+    let cumulative = [[]];
+    let interval = [[]];
 
-    const rows = normalizeRows(data);
-    const { cumulative, interval } = bucketByIntervalLength(rows, bucket);
+    if (bucket === 'none'){
+
+      data.forEach((one_row) => {raw_cumulative.push(one_row['Cumulative Views']);
+                                  raw_interval.push(one_row['Views in Interval']);
+                                  const rawDateStr = one_row['Interval Start'];
+                                  const timestamp = new Date(`${rawDateStr} ${ASSUMED_YEAR}`).getTime();
+                                  timeEnds.push(formatAxisDateTime(timestamp))});
+
+    }else{
+      const rows = normalizeRows(data);
+      const result = bucketByIntervalLength(rows, bucket);
+      cumulative = result.cumulative;
+      interval = result.interval;
+    }
+
 
     chart.setOption(
       {
@@ -44,8 +63,9 @@ export default function InidiviualCharts({ data }) {
         legend: { data: ['Views in Interval', 'Cumulative Views'], bottom: 0 },
         grid: { top: '15%', left: '5%', right: '5%', bottom: '18%', containLabel: true },
         xAxis: {
-          type: 'time',
-          axisLabel: { formatter: formatAxisDateTime, rotate: 30 },
+          type: bucket === 'none' ? 'category' : 'time',
+          data: bucket === 'none' ? timeEnds : undefined,
+          axisLabel: bucket === 'none' ? { rotate:30 } : { formatter: formatAxisDateTime, rotate: 30 },
         },
         yAxis: [
           { type: 'value', name: 'Views in Interval', position: 'left', axisLabel: { formatter: '{value}' } },
@@ -55,7 +75,7 @@ export default function InidiviualCharts({ data }) {
           {
             name: 'Views in Interval',
             type: 'bar',
-            data: interval,
+            data: bucket === 'none' ? raw_interval : interval,
             itemStyle: { color: '#3b82f6' },
             barMaxWidth: 24,
           },
@@ -63,7 +83,7 @@ export default function InidiviualCharts({ data }) {
             name: 'Cumulative Views',
             type: 'line',
             yAxisIndex: 1,
-            data: cumulative,
+            data: bucket === 'none' ? raw_cumulative : cumulative,
             smooth: true,
             symbolSize: 5,
             itemStyle: { color: '#10b981' },
