@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as echarts from 'echarts';
 import { normalizeRows, bucketByIntervalLength, formatAxisDateTime, BUCKET_OPTIONS } from '@/lib/chartAggregation';
 
-export default function NasdaqTimesSqu({ data }) {
+export default function InidiviualCharts({ data }) {
   const chartRef = useRef(null);
   const chartInstanceRef = useRef(null);
   const [bucket, setBucket] = useState('1:00');

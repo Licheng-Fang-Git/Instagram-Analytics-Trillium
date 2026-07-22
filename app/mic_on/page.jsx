@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import Papa from 'papaparse';
-import NasdaqTimesSqu from '@/components/NasdaqTimesSqu';
+import InidiviualCharts from '@/components/InidiviualCharts';
 import InstagramEmbed from '@/components/InstagramEmbed';
 import {getPostMetrics} from '@/app/content.js';
 import MetricCards from '@/components/MetricCards';
@@ -57,7 +57,7 @@ export default async function DashboardPage() {
         </div>
         <MetricCards data={postMetrics} />
         {/* 3. Send parsed data straight to the chart component */}
-        <NasdaqTimesSqu data={chartData} />
+        <InidiviualCharts data={chartData} />
         {/* <div className="ml-60"> <InstagramEmbed url={link} /></div> */}
         <div> <InstagramEmbed url={link} /></div>
     </div>
