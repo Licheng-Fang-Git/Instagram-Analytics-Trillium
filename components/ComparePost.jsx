@@ -436,7 +436,7 @@ export default function ComparePost() {
       </div>
 
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Views per Interval (Bar Comparison)</h2>
+        <h2 className="text-lg font-semibold text-gray-800 mb-4">Reaction per Interval (Bar Comparison)</h2>
         {hasSelection ? (
           <div ref={intervalBarChartRef} className="w-full h-[400px]" />
         ) : (

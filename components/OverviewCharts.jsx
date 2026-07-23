@@ -168,15 +168,243 @@ export default function OverviewCharts({ data }) {
         };
       }, [slots, allPostDates, bucket]);
 
+
+      useEffect(() => {
+        if (!interactionChartRef.current) return;
+        if (!interactionInstanceRef.current) {
+          interactionInstanceRef.current = echarts.init(interactionChartRef.current);
+        }
+        const chart = interactionInstanceRef.current;
+        let interactions = [];
+        let time = [];
+        data.forEach((row) => {interactions.push(row['Content interactions']); 
+                                time.push(row['Date']);})
+
+    
+        // const series = activeSlots.map((slot, i) => {
+        //   const filtered = seriesForBucket(slot.series.rows, bucket);
+        //   return {
+        //     name: slot.selected.label,
+        //     type: 'line',
+        //     showSymbol: false,
+        //     smooth: true,
+        //     data: filtered.cumulative,
+        //     lineStyle: { width: 3 },
+        //     itemStyle: { color: colorFor(i) },
+        //     markPoint: {
+        //       ...MARK_POINT(colorFor(i)),
+        //       data: getCrossPostMarks(slot, allPostDates, filtered.cumulative),
+        //     },
+        //   };
+        // });
+    
+        chart.setOption(
+          {
+            tooltip: { trigger: 'axis' },
+            // legend: { bottom: 0, data: series.map((s) => s.name) },
+            grid: { top: '10%', left: '5%', right: '5%', bottom: '22%', containLabel: true },
+            xAxis: {
+              type: 'category',
+              data: time,
+              axisLabel: { rotate: 30 },
+            },
+            yAxis:[ { type: 'value', name: 'Reach', position: 'right', axisLabel: { formatter: '{value}' }}],
+            series: [
+                {
+                    name: 'Reach',
+                    type: 'line',
+                    data: interactions,
+                    smooth: true,
+                    symbolSize: 5,
+                    itemStyle: { color: '#10b981' },
+                    lineStyle: { width: 3 },
+                }],
+          },
+          { notMerge: true }
+        );
+    
+        const handleMarkPointClick = (params) => {
+          if (params.componentType === 'markPoint' && params.data?.link) {
+            window.open(params.data.link, '_blank', 'noopener,noreferrer');
+          }
+        };
+        chart.on('click', handleMarkPointClick);
+    
+        const handleResize = () => chart.resize();
+        window.addEventListener('resize', handleResize);
+        return () => {
+          window.removeEventListener('resize', handleResize);
+          chart.off('click', handleMarkPointClick);
+        };
+      }, [slots, allPostDates, bucket]);
+
+      useEffect(() => {
+        if (!visitsChartRef.current) return;
+        if (!visitsInstanceRef.current) {
+          visitsInstanceRef.current = echarts.init(visitsChartRef.current);
+        }
+        const chart = visitsInstanceRef.current;
+        let visits = [];
+        let time = [];
+        data.forEach((row) => {visits.push(row['Visits']); 
+                                time.push(row['Date']);})
+
+    
+        // const series = activeSlots.map((slot, i) => {
+        //   const filtered = seriesForBucket(slot.series.rows, bucket);
+        //   return {
+        //     name: slot.selected.label,
+        //     type: 'line',
+        //     showSymbol: false,
+        //     smooth: true,
+        //     data: filtered.cumulative,
+        //     lineStyle: { width: 3 },
+        //     itemStyle: { color: colorFor(i) },
+        //     markPoint: {
+        //       ...MARK_POINT(colorFor(i)),
+        //       data: getCrossPostMarks(slot, allPostDates, filtered.cumulative),
+        //     },
+        //   };
+        // });
+    
+        chart.setOption(
+          {
+            tooltip: { trigger: 'axis' },
+            // legend: { bottom: 0, data: series.map((s) => s.name) },
+            grid: { top: '10%', left: '5%', right: '5%', bottom: '22%', containLabel: true },
+            xAxis: {
+              type: 'category',
+              data: time,
+              axisLabel: { rotate: 30 },
+            },
+            yAxis:[ { type: 'value', name: 'Reach', position: 'right', axisLabel: { formatter: '{value}' }}],
+            series: [
+                {
+                    name: 'Reach',
+                    type: 'line',
+                    data: visits,
+                    smooth: true,
+                    symbolSize: 5,
+                    itemStyle: { color: '#10b981' },
+                    lineStyle: { width: 3 },
+                }],
+          },
+          { notMerge: true }
+        );
+    
+        const handleMarkPointClick = (params) => {
+          if (params.componentType === 'markPoint' && params.data?.link) {
+            window.open(params.data.link, '_blank', 'noopener,noreferrer');
+          }
+        };
+        chart.on('click', handleMarkPointClick);
+    
+        const handleResize = () => chart.resize();
+        window.addEventListener('resize', handleResize);
+        return () => {
+          window.removeEventListener('resize', handleResize);
+          chart.off('click', handleMarkPointClick);
+        };
+      }, [slots, allPostDates, bucket]);
+
+      useEffect(() => {
+        if (!followsChartRef.current) return;
+        if (!followsInstanceRef.current) {
+          followsInstanceRef.current = echarts.init(followsChartRef.current);
+        }
+        const chart = followsInstanceRef.current;
+        let follows = [];
+        let time = [];
+        data.forEach((row) => {follows.push(row['Follows']); 
+                                time.push(row['Date']);})
+
+    
+        // const series = activeSlots.map((slot, i) => {
+        //   const filtered = seriesForBucket(slot.series.rows, bucket);
+        //   return {
+        //     name: slot.selected.label,
+        //     type: 'line',
+        //     showSymbol: false,
+        //     smooth: true,
+        //     data: filtered.cumulative,
+        //     lineStyle: { width: 3 },
+        //     itemStyle: { color: colorFor(i) },
+        //     markPoint: {
+        //       ...MARK_POINT(colorFor(i)),
+        //       data: getCrossPostMarks(slot, allPostDates, filtered.cumulative),
+        //     },
+        //   };
+        // });
+    
+        chart.setOption(
+          {
+            tooltip: { trigger: 'axis' },
+            // legend: { bottom: 0, data: series.map((s) => s.name) },
+            grid: { top: '10%', left: '5%', right: '5%', bottom: '22%', containLabel: true },
+            xAxis: {
+              type: 'category',
+              data: time,
+              axisLabel: { rotate: 30 },
+            },
+            yAxis:[ { type: 'value', name: 'Reach', position: 'right', axisLabel: { formatter: '{value}' }}],
+            series: [
+                {
+                    name: 'Reach',
+                    type: 'line',
+                    data: follows,
+                    smooth: true,
+                    symbolSize: 5,
+                    itemStyle: { color: '#10b981' },
+                    lineStyle: { width: 3 },
+                }],
+          },
+          { notMerge: true }
+        );
+    
+        const handleMarkPointClick = (params) => {
+          if (params.componentType === 'markPoint' && params.data?.link) {
+            window.open(params.data.link, '_blank', 'noopener,noreferrer');
+          }
+        };
+        chart.on('click', handleMarkPointClick);
+    
+        const handleResize = () => chart.resize();
+        window.addEventListener('resize', handleResize);
+        return () => {
+          window.removeEventListener('resize', handleResize);
+          chart.off('click', handleMarkPointClick);
+        };
+      }, [slots, allPostDates, bucket]);
+
     return (
-    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-        <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-gray-800">Financial & User Growth</h2>
-        </div>
+    <div>
 
         {/* Target element initialized by ECharts hooks */}
-        <div ref={viewsChartRef} className="w-full h-[450px]" />
-        <div ref={reachChartRef} className="w-full h-[450px]" />
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">Views per Day</h2>
+          <div ref={viewsChartRef} className="w-full h-[450px]" />
+        </div>
+
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mt-[35px]">
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">Reach per Day</h2>
+          <div ref={reachChartRef} className="w-full h-[450px]" />
+        </div>
+
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mt-[35px]">
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">Interaction per Day</h2>
+          <div ref={interactionChartRef} className="w-full h-[450px]" />
+        </div>
+
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mt-[35px]">
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">Visits per Day</h2>
+          <div ref={visitsChartRef} className="w-full h-[450px]" />
+        </div>
+
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mt-[35px]">
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">Follows per Day</h2>
+          <div ref={followsChartRef} className="w-full h-[450px]" />
+        </div>
+
 
     </div>
     );
