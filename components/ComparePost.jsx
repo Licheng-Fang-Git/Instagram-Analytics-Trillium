@@ -12,6 +12,7 @@ const POST_OPTIONS = [
   { code: 'micon2026', label: 'Mic On' },
   { code: 'nasdaq2026', label: 'Nasdaq Times Square' },
   { code: 'misconceptions2026', label: 'Misconceptions Reel' },
+  { code: 'cht2026', label: 'College Hot Takes' },
 ];
 
 const LINE_COLORS = ['#3b82f6', '#f97316', '#10b981', '#a855f7', '#ef4444', '#06b6d4', '#ec4899', '#84cc16'];

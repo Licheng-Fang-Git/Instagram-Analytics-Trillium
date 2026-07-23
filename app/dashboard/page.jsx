@@ -23,8 +23,11 @@ async function getGoogleSheetAsCSV(sheetId, sheetName = 'Meet The Interns') {
 }
 
 
+// Pulls live from Google Sheets on every request instead of baking data in at
+// build time — keeps the dashboard fresh and avoids build-time fetch failures.
+export const dynamic = 'force-dynamic';
+
 export default async function DashboardPage() {
-  // 1. Locate the local CSV file (placed inside src/data/analytics_data.csv)
   const SPREADSHEET_ID = '18wYFbvgo3NtOUvJt-wHQct7Pz18KoRYNaCyAm8t45R4';
   const fileContent = await getGoogleSheetAsCSV(SPREADSHEET_ID, 'Overview');
 
