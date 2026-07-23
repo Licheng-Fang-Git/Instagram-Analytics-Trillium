@@ -91,7 +91,7 @@ function PostSearchBox({ index, query, onQueryChange, onSelect, excludeCodes, is
           type="text"
           value={query}
           placeholder={`Search post ${index + 1}... (e.g. nasdaq2026)`}
-          className={`w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 ${
+          className={`w-full border border-[#1c1c1c] rounded-full px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 ${
             isSelected ? 'text-black font-bold' : 'text-gray-700 font-normal'
           }`}
           onChange={(e) => {
@@ -389,7 +389,7 @@ export default function ComparePost() {
           <button
             type="button"
             onClick={addSlot}
-            className="shrink-0 px-4 py-2 rounded border border-dashed border-gray-300 text-sm text-gray-500 hover:border-blue-400 hover:text-blue-500"
+            className="shrink-0 px-4 py-2 rounded border border-solid border-[#FFFFFF] bg-[#0D0D0D] text-sm text-[#FFFFFF] hover:bg-[#EBFFA8] hover:text-[#0D0D0D] hover:border-[#0D0D0D]"
           >
             + Add post
           </button>

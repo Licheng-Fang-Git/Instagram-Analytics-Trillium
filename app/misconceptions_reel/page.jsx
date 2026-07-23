@@ -46,10 +46,6 @@ export default async function DashboardPage() {
     <div className="p-8 max-w-6xl mx-auto space-y-6">
         <div>
         <h1 className="text-3xl font-bold tracking-tight text-gray-900">Misconception Reel Dashboard</h1>
-        <p className="text-gray-500">Overview of application metrics pulled directly from CSV.</p>
-        </div>
-        <div className="ml-3">
-            <a href={link} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Post Link</a>
         </div>
         <MetricCards data={postMetrics} />
         {/* 3. Send parsed data straight to the chart component */}

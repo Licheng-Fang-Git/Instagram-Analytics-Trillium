@@ -14,31 +14,22 @@ export default function MetricCards({data}) {
   ];
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
+    <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
       {metrics.map((item, index) => (
         <div
           key={index}
-          className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-between hover:border-gray-300 transition-colors"
+          className="w-[245px] h-[110px] bg-[#0c0c0c] rounded-xl px-5 py-4 flex flex-col justify-center items-start box-border"
         >
           {/* Top Row: Metric Label & Percentage Badge */}
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <span className="text-[#dfdecc] font-sans text-sm font-bold tracking-widest mb-1.5">
               {item.label}
-            </span>
-            <span
-              className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-full ${
-                item.isPositive
-                  ? 'bg-emerald-50 text-emerald-600'
-                  : 'bg-rose-50 text-rose-600'
-              }`}
-            >
-              {item.change}
             </span>
           </div>
 
           {/* Bottom Row: Main Numeric Value */}
           <div>
-            <span className="text-xl font-bold tracking-tight text-gray-900">
+            <span className="text-white font-serif text-4xl leading-none">
               {item.value}
             </span>
           </div>

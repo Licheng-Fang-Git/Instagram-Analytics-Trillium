@@ -59,24 +59,31 @@ export default function InidiviualCharts({ data }) {
 
     chart.setOption(
       {
+        backgroundColor: 'transparent',
         tooltip: { trigger: 'axis' },
-        legend: { data: ['Views in Interval', 'Cumulative Views'], bottom: 0 },
+        legend: { data: ['Views in Interval', 'Cumulative Views'], 
+                  bottom: 0,     
+                  textStyle: {
+                    color: '#dfdecc',
+                    fontFamily: 'sans-serif'
+                  }},
         grid: { top: '15%', left: '5%', right: '5%', bottom: '18%', containLabel: true },
         xAxis: {
           type: bucket === 'none' ? 'category' : 'time',
           data: bucket === 'none' ? timeEnds : undefined,
-          axisLabel: bucket === 'none' ? { rotate:30 } : { formatter: formatAxisDateTime, rotate: 30 },
+          nameTextStyle: {color:'dfdecc'},
+          axisLabel: bucket === 'none' ? { color: '#a0a0a0', rotate:30 } : { formatter: formatAxisDateTime, rotate: 30 },
         },
         yAxis: [
-          { type: 'value', name: 'Views in Interval', position: 'left', axisLabel: { formatter: '{value}' } },
-          { type: 'value', name: 'Cumulative Views', position: 'right' },
+          { type: 'value', name: 'Views in Interval', position: 'left', axisLabel: { color: '#dfdecc', formatter: '{value}' }, nameTextStyle:{color:'#dfdecc'} },
+          { type: 'value', name: 'Cumulative Views', position: 'right', axisLabel : {color: '#dfdecc' }, nameTextStyle: {color:'dfdecc'}},
         ],
         series: [
           {
             name: 'Views in Interval',
             type: 'bar',
             data: bucket === 'none' ? raw_interval : interval,
-            itemStyle: { color: '#3b82f6' },
+            itemStyle: { color: '#eab308' },
             barMaxWidth: 24,
           },
           {
@@ -96,18 +103,18 @@ export default function InidiviualCharts({ data }) {
   }, [data, bucket]);
 
   return (
-    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-gray-800">Financial & User Growth</h2>
-        <label className="flex items-center gap-2 text-xs text-gray-500">
+    <div className="bg-[#1c1c1c] text-white p-6 rounded-xl shadow-sm border border-gray-200">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-xl font-medium tracking-wide text-[#dfdecc]">Financial & User Growth</h2>
+        <label className="flex items-center gap-2 text-xs text-[#dfdecc]">
           Bucket size:
           <select
             value={bucket}
             onChange={(e) => setBucket(e.target.value)}
-            className="border border-gray-200 rounded px-2 py-1 text-gray-700"
+            className="border border-gray-200 rounded px-2 py-1 text-[#dfdecc] hover:border-[#ebffa8]"
           >
             {BUCKET_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
+              <option key={o.value} value={o.value} className='text-[#0d0d0d]'>
                 {o.label}
               </option>
             ))}
@@ -116,7 +123,7 @@ export default function InidiviualCharts({ data }) {
       </div>
 
       {/* Target element initialized by ECharts hooks */}
-      <div ref={chartRef} className="w-full h-[450px]" />
+      <div ref={chartRef} className="w-full h-[450px] " />
     </div>
   );
 }
