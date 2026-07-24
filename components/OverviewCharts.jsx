@@ -13,6 +13,7 @@ const POST_LABELS = {
   micon2026: 'Mic On',
   nasdaq2026: 'Nasdaq Times Square',
   misconceptions2026: 'Misconceptions Reel',
+  cht2026: "College Hot Takes"
 };
 
 // The five metrics, each its own chart. Colors are just for the line/markers.
@@ -202,7 +203,7 @@ export default function OverviewCharts({ data }) {
             min={minDate}
             max={end}
             onChange={(e) => setStart(e.target.value)}
-            className="border border-gray-300 rounded px-2 py-1"
+            className="border border-[#0d0d0d] rounded px-2 py-1 hover:border-[#3e84ff]"
           />
         </label>
         <label className="flex items-center gap-1 text-gray-600">
@@ -213,7 +214,7 @@ export default function OverviewCharts({ data }) {
             min={start}
             max={maxDate}
             onChange={(e) => setEnd(e.target.value)}
-            className="border border-gray-300 rounded px-2 py-1"
+            className="border border-[#0d0d0d] rounded px-2 py-1 hover:border-[#3e84ff]"
           />
         </label>
         <div className="flex items-center gap-2">

@@ -18,7 +18,7 @@ const JULY_POSTS = [
   { href: '/college_hot_takes', label: 'College Hot Takes', code: 'cht2026' },
 ];
 
-const LINK_CLASS = 'block px-4 py-2 rounded bg-blue-5 text-[#67696F] font-medium hover:text-[#FFFFFF]';
+const LINK_CLASS = 'block px-4 py-2 rounded bg-blue-5 text-[#FFFFFF] font-medium hover:text-[#ebffa8]';
 
 function PostLink({ href, label, code, showCodes }) {
   return (

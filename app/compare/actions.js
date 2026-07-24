@@ -68,7 +68,7 @@ export async function getAllPostDates() {
                 skipEmptyLines: true,
             });
             const postedAt = new Date(`${data[0]['Interval Start']} 2026`).getTime();
-            const link = data[0].Link ? .trim() || null;
+            const link = data[0].Link?.trim() || null;
             return [code, { postedAt, link }];
         })
     );

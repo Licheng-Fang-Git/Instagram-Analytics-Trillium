@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react';
 // Permissions-Policy violation; a plain iframe keeps that script out of our
 // page entirely. Instagram's embed frame still posts its measured height to
 // the parent, so we listen for that to auto-size (with a sensible fallback).
-const FALLBACK_HEIGHT = 800;
+const FALLBACK_HEIGHT = 700;
 
 export default function InstagramEmbed({ url }) {
   const [height, setHeight] = useState(FALLBACK_HEIGHT);
@@ -18,7 +18,7 @@ export default function InstagramEmbed({ url }) {
   const base = clean ? (clean.endsWith('/') ? clean : `${clean}/`) : null;
   // "captioned" matches the previous embed (it showed the caption); the frame
   // reports its own height via postMessage, which the listener below applies.
-  const embedSrc = base ? `${base}embed/captioned` : null;
+  const embedSrc = base ? `${base}embed/` : null;
 
   useEffect(() => {
     function onMessage(event) {
@@ -46,7 +46,7 @@ export default function InstagramEmbed({ url }) {
       src={embedSrc}
       title="Instagram post"
       className="mx-auto w-full max-w-[300px] rounded-md border border-gray-200 bg-white"
-      style={{ height, maxWidth: width }}
+      style={{ height: height, maxWidth: width }}
       frameBorder={0}
       scrolling="no"
       loading="lazy"
