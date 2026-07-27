@@ -1,0 +1,228 @@
+/* ============================================================
+   TRILLIUM TRADING — Design Tokens
+   Colors + Typography (base + semantic)
+   Spec sources:
+     - Trillium Branding Guidelines (2026)
+     - Trillium Brand Guide (2023) — primary/accent palette
+     - Docebo Custom CSS (2026) — live web tokens used on trlm.com / LMS
+   ============================================================ */
+
+/* ---- FONTS ---------------------------------------------------
+   Per guidelines:
+     H1 — Georgia (serif, title case)          [fallback: Times New Roman]
+     H2 — Montserrat (sans, tight / display)
+     H3 — Open Sans  (sans, strong)
+     Body 1 — ITC Franklin Gothic LT           [fallback: Franklin Gothic Book, Arial]
+     Body 2 — Montserrat
+     Body 3 — Open Sans (default Docebo body)
+   We load web-safe equivalents + Google Font swaps for Montserrat/Open Sans.
+   Georgia and Arial ship with the OS. Franklin Gothic substitute → "Libre Franklin".
+   ------------------------------------------------------------- */
+/* Google Font @import is hoisted to the top of globals.css (CSS requires all
+   @import rules to precede other statements, and this file is inlined there). */
+
+:root {
+  /* ======= COLOR — PRIMARY ======= */
+  /* The guidelines say the pure primary pair is black + white.
+     The live system uses #1c1c1c (near-black) as the "true" black,
+     and #0d0d0d for immersive/banner dark surfaces. */
+  --trlm-black:        #1c1c1c;    /* primary brand black (print spec) */
+  --trlm-ink:          #0d0d0d;    /* deep black — banners, footers, immersive */
+  --trlm-pure-black:   #000000;    /* pure — buttons, headers */
+  --trlm-white:        #ffffff;
+
+  /* ======= COLOR — NEUTRALS / SECONDARY ======= */
+  --trlm-dark-grey:    #67696f;    /* body meta, secondary UI text */
+  --trlm-medium-grey:  #787878;    /* captions, disabled, rules */
+  --trlm-light-grey:   #e8e8e8;    /* surface, dividers */
+  --trlm-bg-grey:      #f8f8f8;    /* page sub-section background (Docebo) */
+  --trlm-beige:        #d9d4cb;    /* signature warm neutral — section bands */
+
+  /* ======= COLOR — ACCENTS ======= */
+  --trlm-yellow:       #ebffa8;    /* signature muted pale yellow — used sparingly */
+  --trlm-tc-orange:    #ff6549;    /* Trillium Cares — philanthropy */
+
+  /* ======= COLOR — ACE SESSION SPECTRUM ======= */
+  /* Used exclusively for ACE (educational programming / sessions). */
+  --trlm-ace-dark-blue:  #1f42b6;
+  --trlm-ace-mid-blue:   #3e84ff;
+  --trlm-ace-cyan:       #00928b;
+  --trlm-ace-turquoise:  #00d1ae;
+  --trlm-ace-orange:     #ee8134;
+  --trlm-ace-mustard:    #ffb531;
+
+  /* ======= SEMANTIC — SURFACES & TEXT ======= */
+  --bg:                var(--trlm-white);
+  --bg-alt:            var(--trlm-bg-grey);
+  --bg-inverse:        var(--trlm-ink);
+  --bg-band:           var(--trlm-beige);
+
+  --fg:                var(--trlm-black);
+  --fg-muted:          var(--trlm-dark-grey);
+  --fg-subtle:         var(--trlm-medium-grey);
+  --fg-inverse:        var(--trlm-white);
+  --fg-accent:         var(--trlm-yellow);
+
+  --border:            var(--trlm-light-grey);
+  --border-strong:     var(--trlm-black);
+  --divider:           #e0e0e0;
+
+  --link:              var(--trlm-pure-black);
+  --link-hover:        var(--trlm-dark-grey);
+  --link-on-dark:      var(--trlm-yellow);
+
+  /* ======= TYPE FAMILIES ======= */
+  --ff-serif-display:  Georgia, 'Times New Roman', Times, serif;   /* @kind font */
+  --ff-sans-display:   'Montserrat', 'Helvetica Neue', Helvetica, Arial, sans-serif;   /* @kind font */
+  --ff-sans-body:      'Open Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;   /* @kind font */
+  --ff-sans-alt:       'Libre Franklin', 'ITC Franklin Gothic LT', 'Franklin Gothic Book',
+                       'Helvetica Neue', Arial, sans-serif;   /* @kind font */
+  --ff-mono:           ui-monospace, 'SF Mono', Menlo, Consolas, monospace;   /* @kind font */
+
+  /* ======= TYPE SCALE ======= */
+  /* Headlines are the message — use big, serif, Georgia. */
+  --fs-display:        72px;   /* @kind font */
+  --fs-h1:             56px;   /* @kind font */
+  --fs-h2:             40px;   /* @kind font */
+  --fs-h3:             28px;   /* @kind font */
+  --fs-h4:             22px;   /* @kind font */
+  --fs-lg:             18px;   /* @kind font */
+  --fs-body:           16px;   /* @kind font */
+  --fs-sm:             14px;   /* @kind font */
+  --fs-xs:             12px;   /* @kind font */
+  /* eyebrow: uppercase + tracked */
+  --fs-eyebrow:        11px;   /* @kind font */
+
+  /* ======= TYPE WEIGHTS ======= */
+  --fw-light:          300;   /* @kind font */
+  --fw-regular:        400;   /* @kind font */
+  --fw-medium:         500;   /* @kind font */
+  --fw-semi:           600;   /* @kind font */
+  --fw-bold:           700;   /* @kind font */
+  --fw-black:          800;   /* @kind font */
+
+  /* ======= LINE HEIGHTS ======= */
+  --lh-tight:          1.05;   /* @kind font */
+  --lh-heading:        1.15;   /* @kind font */
+  --lh-body:           1.55;   /* @kind font */
+  --lh-loose:          1.7;   /* @kind font */
+
+  /* ======= TRACKING ======= */
+  --ls-tight:          -0.02em;   /* @kind font */
+  --ls-normal:         0;   /* @kind font */
+  --ls-wide:           0.02em;   /* @kind font */
+  /* uppercase button / eyebrow */
+  --ls-ui-caps:        0.1em;   /* @kind font */
+  --ls-heading:        -0.01em;   /* @kind font */
+
+  /* ======= SPACING (4pt base) ======= */
+  --sp-0:              0;   /* @kind spacing */
+  --sp-1:              4px;
+  --sp-2:              8px;
+  --sp-3:              12px;
+  --sp-4:              16px;
+  --sp-5:              20px;
+  --sp-6:              24px;
+  --sp-7:              32px;
+  --sp-8:              40px;
+  --sp-9:              56px;
+  --sp-10:             72px;
+  --sp-11:             96px;
+  --sp-12:             128px;
+
+  /* ======= CORNER RADII ======= */
+  /* Trillium is predominantly sharp-cornered. The LMS adds gentle rounding. */
+  --r-none:            0;   /* @kind radius */
+  --r-xs:              2px;
+  --r-sm:              4px;
+  --r-md:              8px;
+  --r-lg:              10px;     /* Docebo widgets */
+  --r-xl:              20px;     /* login surfaces */
+  --r-pill:            100px;    /* Docebo page buttons */
+
+  /* ======= SHADOWS ======= */
+  --shadow-xs:         0 1px 2px rgba(0,0,0,0.04);
+  --shadow-sm:         0 2px 2px rgba(206,206,206,0.5);           /* "soft" Docebo shadow */
+  --shadow-md:         0 4px 6px rgba(0,0,0,0.05);
+  --shadow-lg:         0 5px 5px rgba(153,153,153,0.6);           /* "deep" Docebo shadow */
+  --shadow-hover:      0 4px 8px rgba(0,0,0,0.2);                 /* button hover lift */
+
+  /* ======= TRANSITIONS ======= */
+  --t-fast:            0.15s ease;   /* @kind other */
+  --t-base:            0.25s ease-in-out;   /* @kind other */
+  --t-slow:            0.4s ease;   /* @kind other */
+  --t-hover-lift:      transform 0.18s ease, filter 0.18s ease;   /* @kind other */
+
+  /* ======= CONTAINER ======= */
+  --maxw-prose:        68ch;   /* @kind spacing */
+  --maxw-content:      1200px;   /* @kind spacing */
+  --maxw-wide:         1440px;   /* @kind spacing */
+}
+
+/* ============================================================
+   SEMANTIC ELEMENT STYLES
+   These map tokens onto bare HTML so content files
+   can work with almost no markup.
+   Wrapped in @layer base so Tailwind utility classes (which drive the
+   dashboard's dark redesign) always win over these bare defaults.
+   ============================================================ */
+
+@layer base {
+
+html { color: var(--fg); background: var(--bg); }
+
+body {
+  font-family: var(--ff-sans-body);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4, h5, h6 { font-family: var(--ff-serif-display); margin: 0 0 var(--sp-4); letter-spacing: var(--ls-heading); line-height: var(--lh-heading); font-weight: var(--fw-regular); text-wrap: balance; }
+h1 { font-size: var(--fs-h1); line-height: var(--lh-tight); }
+h2 { font-size: var(--fs-h2); }
+h3 { font-size: var(--fs-h3); }
+h4 { font-size: var(--fs-h4); font-family: var(--ff-sans-display); font-weight: var(--fw-semi); letter-spacing: var(--ls-normal); }
+
+.trlm-display  { font-family: var(--ff-serif-display); font-size: var(--fs-display); line-height: var(--lh-tight); letter-spacing: var(--ls-heading); font-weight: var(--fw-regular); }
+.trlm-eyebrow  { font-family: var(--ff-sans-display); font-size: var(--fs-eyebrow); text-transform: uppercase; letter-spacing: var(--ls-ui-caps); font-weight: var(--fw-semi); color: var(--fg-muted); }
+.trlm-lead     { font-family: var(--ff-sans-body); font-size: var(--fs-lg); line-height: var(--lh-body); color: var(--fg-muted); text-wrap: pretty; }
+.trlm-caption  { font-size: var(--fs-sm); color: var(--fg-muted); }
+
+p { margin: 0 0 var(--sp-4); max-width: var(--maxw-prose); text-wrap: pretty; }
+strong, b { font-weight: var(--fw-semi); color: var(--fg); }
+small { font-size: var(--fs-sm); color: var(--fg-muted); }
+
+a { color: var(--link); text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; transition: color var(--t-fast); }
+a:hover { color: var(--link-hover); }
+
+hr { border: 0; border-top: 1px solid var(--divider); margin: var(--sp-7) 0; }
+
+code, pre, kbd, samp { font-family: var(--ff-mono); font-size: 0.95em; }
+
+/* UI primitives — minimal button + uppercase CTA, matching Docebo live styling */
+.trlm-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 50px; padding: 0 var(--sp-7);
+  background: var(--trlm-pure-black); color: var(--trlm-white);
+  font-family: var(--ff-sans-display);
+  font-size: 13px; font-weight: var(--fw-semi);
+  text-transform: uppercase; letter-spacing: var(--ls-ui-caps);
+  text-decoration: none; border: 1px solid var(--trlm-pure-black); border-radius: var(--r-none);
+  transition: all var(--t-base); cursor: pointer;
+}
+.trlm-btn:hover { background: var(--trlm-yellow); color: var(--trlm-ink); border-color: var(--trlm-ink); }
+.trlm-btn--ghost { background: transparent; color: var(--trlm-pure-black); }
+.trlm-btn--ghost:hover { background: var(--trlm-pure-black); color: var(--trlm-white); }
+.trlm-btn--on-dark { background: transparent; color: var(--trlm-white); border-color: rgba(255,255,255,0.3); }
+.trlm-btn--on-dark:hover { background: var(--trlm-yellow); color: var(--trlm-ink); border-color: var(--trlm-yellow); }
+
+/* Section bands */
+.trlm-band-dark  { background: var(--trlm-ink);   color: var(--trlm-white); }
+.trlm-band-beige { background: var(--trlm-beige); color: var(--trlm-black); }
+.trlm-band-grey  { background: var(--trlm-bg-grey); color: var(--trlm-black); }
+
+}
+/* end @layer base */

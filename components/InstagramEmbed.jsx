@@ -45,7 +45,7 @@ export default function InstagramEmbed({ url }) {
     <iframe
       src={embedSrc}
       title="Instagram post"
-      className="mx-auto w-full max-w-[300px] rounded-md border border-gray-200 bg-white"
+      className="mx-auto w-full max-w-[300px] border border-[#2a2a2a] bg-white"
       style={{ height: height, maxWidth: width }}
       frameBorder={0}
       scrolling="no"

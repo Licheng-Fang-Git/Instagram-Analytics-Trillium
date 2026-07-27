@@ -1,26 +1,78 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800&family=Open+Sans:wght@300;400;500;600;700&family=Libre+Franklin:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
+@import "./trlm-tokens.css";
+
+/* ============================================================
+   TRILLIUM INSTAGRAM ANALYTICS — dark dashboard shell
+   Applies the Claude design language on top of the brand tokens
+   defined in trlm-tokens.css.
+   ============================================================ */
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0d0d0d;
+  --foreground: #ffffff;
+  --surface: #121212;
+  --surface-black: #000000;
+  --border-soft: #1f1f1f;
+  --border-mid: #232323;
+  --border-strong: #2a2a2a;
+  --accent: #ebffa8;
+  --beige: #d9d4cb;
+  --muted: #67696f;
+  --subtle: #787878;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-accent: var(--accent);
+  --color-beige: var(--beige);
+  --color-surface: var(--surface);
+  --font-serif: var(--ff-serif-display);
+  --font-sans: var(--ff-sans-body);
+  --font-display: var(--ff-sans-display);
+  --font-mono: var(--ff-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/* Dark-theme base — overrides the light defaults from trlm-tokens.css. */
+html,
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  padding: 0;
+  background: #0d0d0d;
+  color: #ffffff;
+  font-family: var(--ff-sans-body);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: #ebffa8;
+  color: #0d0d0d;
+}
+
+a {
+  color: #ebffa8;
+  text-decoration: none;
+}
+a:hover {
+  color: #ffffff;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: #0d0d0d;
+}
+*::-webkit-scrollbar-thumb {
+  background: #2a2a2a;
+}
+
+/* Reusable eyebrow already ships in trlm-tokens.css (.trlm-eyebrow);
+   keep it tinted for the dark surfaces. */
+.trlm-eyebrow {
+  color: #67696f;
 }

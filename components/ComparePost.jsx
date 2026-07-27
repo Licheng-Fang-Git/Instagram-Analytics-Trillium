@@ -2,30 +2,44 @@
 
 import { useEffect, useRef, useState } from 'react';
 import * as echarts from 'echarts';
-import { getPostSeries, getAllPostDates } from '@/app/compare/actions';
-import { interpolateValue, formatAxisDateTime, bucketByIntervalLength, BUCKET_OPTIONS } from '@/lib/chartAggregation';
+import { getPostSummary, getAllPostDates } from '@/app/compare/actions';
+import {
+  interpolateValue,
+  formatAxisDateTime,
+  bucketByIntervalLength,
+  BUCKET_OPTIONS,
+} from '@/lib/chartAggregation';
+import { BRAND, brandTooltip, valueAxis, axisLabel, axisLine, seriesColor } from '@/lib/chartTheme';
 
 const POST_OPTIONS = [
-  { code: 'ditl2026', label: 'Intern Day Reel' },
   { code: 'interns2026', label: 'Meet the 2026 Interns' },
-  { code: 'mentors2026', label: 'Meet the Mentors' },
   { code: 'micon2026', label: 'Mic On' },
   { code: 'nasdaq2026', label: 'Nasdaq Times Square' },
+  { code: 'mentors2026', label: 'Meet the Mentors' },
+  { code: 'ditl2026', label: 'Intern Day Reel' },
   { code: 'misconceptions2026', label: 'Misconceptions Reel' },
   { code: 'cht2026', label: 'College Hot Takes' },
 ];
 
-const LINE_COLORS = ['#3b82f6', '#f97316', '#10b981', '#a855f7', '#ef4444', '#06b6d4', '#ec4899', '#84cc16'];
-
-function colorFor(i) {
-  return LINE_COLORS[i % LINE_COLORS.length];
+function fmt(n) {
+  return (Number(n) || 0).toLocaleString('en-US');
+}
+function labelFor(code) {
+  return POST_OPTIONS.find((p) => p.code === code)?.label || code;
+}
+// Engagement rate = interactions / reach, as a percentage.
+function engRate(m) {
+  const reach = Number(m?.reach) || 0;
+  if (!reach) return 0;
+  return (
+    (((Number(m.likes) || 0) + (Number(m.saves) || 0) + (Number(m.comments) || 0) + (Number(m.shares) || 0)) /
+      reach) *
+    100
+  );
 }
 
-// The series a post's charts should draw for the chosen bucket. "None" means
-// no bucketing — plot every raw row as-is. Unlike the single-post pages
-// (which use a category axis for "None"), the compare charts stay on the
-// shared time axis so multiple posts with different timelines still line up,
-// so raw rows become [timestamp, value] points here.
+// The series a slot should draw for the chosen bucket. "None" plots every raw
+// row on the shared time axis so posts with different timelines still line up.
 function seriesForBucket(rows, bucket) {
   if (bucket === 'none') {
     return {
@@ -36,15 +50,12 @@ function seriesForBucket(rows, bucket) {
   return bucketByIntervalLength(rows, bucket);
 }
 
-// For a given post's line, find every OTHER post (from the full catalog, not
-// just the other selected slot) that went up after this one's first shown
-// point and before its last — those are the "X was posted here" markers.
-// `ownPoints` is whichever (already filtered) series the mark should sit on.
+// For a given post's line, every OTHER post that went up within its visible
+// window becomes a "X was posted here" marker sitting on this line.
 function getCrossPostMarks(slot, allPostDates, ownPoints) {
   if (!allPostDates || !ownPoints.length) return [];
   const ownStart = ownPoints[0][0];
   const ownEnd = ownPoints[ownPoints.length - 1][0];
-
   return POST_OPTIONS.filter((opt) => opt.code !== slot.selected.code)
     .map((opt) => ({ opt, meta: allPostDates[opt.code] }))
     .filter(({ meta }) => meta && meta.postedAt > ownStart && meta.postedAt <= ownEnd)
@@ -52,47 +63,54 @@ function getCrossPostMarks(slot, allPostDates, ownPoints) {
       name: opt.label,
       link: meta.link,
       coord: [meta.postedAt, interpolateValue(ownPoints, meta.postedAt)],
-      cursor: meta.link ? 'pointer' : 'default',
     }));
 }
 
-const MARK_POINT = (color) => ({
-  symbol: 'circle',
-  symbolSize: 6,
-  itemStyle: { color: 'transparent', borderColor: color, borderWidth: 2 },
-  label: { show: false },
-  emphasis: {
-    label: {
-      show: true,
-      formatter: '{b}',
-      position: 'top',
-      color: '#111827',
-      fontWeight: 'bold',
-      backgroundColor: '#fff',
-      padding: 4,
-      borderRadius: 4,
+function markPoint(color, data) {
+  return {
+    symbol: 'circle',
+    symbolSize: 6,
+    itemStyle: { color: '#0d0d0d', borderColor: color, borderWidth: 1.6 },
+    label: { show: false },
+    emphasis: {
+      label: {
+        show: true,
+        formatter: '{b}',
+        position: 'top',
+        color: '#ffffff',
+        fontFamily: BRAND.sans,
+        fontWeight: 'bold',
+        backgroundColor: '#000000',
+        borderColor: '#2a2a2a',
+        borderWidth: 1,
+        padding: 5,
+      },
     },
-  },
-});
+    data,
+  };
+}
 
-function PostSearchBox({ index, query, onQueryChange, onSelect, excludeCodes, isSelected, onRemove, canRemove }) {
+// Typeahead search for one slot: type part of a code/name, pick from the list.
+function PostSearchBox({ index, query, onQueryChange, onSelect, excludeCodes, isSelected, onRemove, canRemove, color }) {
   const [open, setOpen] = useState(false);
 
   const matches = POST_OPTIONS.filter(
     (opt) =>
       !excludeCodes.includes(opt.code) &&
-      opt.code.toLowerCase().includes(query.trim().toLowerCase())
+      (opt.code.toLowerCase().includes(query.trim().toLowerCase()) ||
+        opt.label.toLowerCase().includes(query.trim().toLowerCase()))
   );
 
   return (
-    <div className="relative w-full">
-      <div className="flex items-center gap-1">
+    <div className="relative w-full min-w-[220px] flex-1">
+      <div className="flex items-center gap-2">
+        {isSelected && <span className="block h-2.5 w-2.5 flex-none" style={{ background: color }} />}
         <input
           type="text"
           value={query}
-          placeholder={`Search post ${index + 1}... (e.g. nasdaq2026)`}
-          className={`w-full border border-[#1c1c1c] rounded-full px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 ${
-            isSelected ? 'text-black font-bold' : 'text-gray-700 font-normal'
+          placeholder={`Search post ${index + 1}… (e.g. nasdaq2026)`}
+          className={`w-full rounded-full border border-[#2a2a2a] bg-[#0d0d0d] px-4 py-[11px] font-mono text-[13px] text-white placeholder:text-[#67696f] focus:border-[#ebffa8] focus:outline-none ${
+            isSelected ? 'text-white' : 'text-[#e8e8e8]'
           }`}
           onChange={(e) => {
             onQueryChange(e.target.value);
@@ -106,7 +124,7 @@ function PostSearchBox({ index, query, onQueryChange, onSelect, excludeCodes, is
             type="button"
             onMouseDown={(e) => e.preventDefault()}
             onClick={onRemove}
-            className="shrink-0 text-gray-400 hover:text-red-500 text-lg leading-none px-1"
+            className="flex-none px-1.5 text-[15px] leading-none text-[#67696f] transition-colors hover:text-[#ebffa8]"
             aria-label={`Remove post ${index + 1}`}
           >
             ×
@@ -114,19 +132,19 @@ function PostSearchBox({ index, query, onQueryChange, onSelect, excludeCodes, is
         )}
       </div>
       {open && query.trim() && matches.length > 0 && (
-        <ul className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded shadow-md max-h-48 overflow-auto">
+        <ul className="absolute z-10 mt-1 max-h-52 w-full overflow-auto border border-[#1f1f1f] bg-[#121212] shadow-lg">
           {matches.map((opt) => (
             <li
               key={opt.code}
-              className="px-3 py-2 cursor-pointer hover:bg-blue-50 text-sm"
+              className="cursor-pointer px-3.5 py-2.5 text-[13px] transition-colors hover:bg-[#1a1a1a]"
               onMouseDown={(e) => {
                 e.preventDefault();
                 onSelect(opt);
                 setOpen(false);
               }}
             >
-              <span className="font-medium">{opt.code}</span>
-              <span className="text-gray-400"> — {opt.label}</span>
+              <span className="font-mono text-white">{opt.code}</span>
+              <span className="text-[#67696f]"> — {opt.label}</span>
             </li>
           ))}
         </ul>
@@ -138,12 +156,10 @@ function PostSearchBox({ index, query, onQueryChange, onSelect, excludeCodes, is
 const EMPTY_SLOT = { query: '', selected: null, series: null };
 
 export default function ComparePost() {
-  const cumulativeChartRef = useRef(null);
-  const cumulativeInstanceRef = useRef(null);
-  const intervalChartRef = useRef(null);
-  const intervalInstanceRef = useRef(null);
-  const intervalBarChartRef = useRef(null);
-  const intervalBarInstanceRef = useRef(null);
+  const cumulativeRef = useRef(null);
+  const cumulativeInst = useRef(null);
+  const intervalRef = useRef(null);
+  const intervalInst = useRef(null);
   const nextSlotId = useRef(2);
 
   const [slots, setSlots] = useState([
@@ -188,192 +204,130 @@ export default function ComparePost() {
     });
 
     try {
-      const series = await getPostSeries(opt.code);
+      const series = await getPostSummary(opt.code);
       setSlots((prev) => {
-        // Bail out if this slot was removed or changed to something else
-        // while the fetch was in flight.
         const idx = prev.findIndex((s) => s.id === slotId);
         if (idx === -1 || prev[idx].selected?.code !== opt.code) return prev;
         const next = [...prev];
         next[idx] = { ...next[idx], series };
         return next;
       });
-    } catch (err) {
+    } catch {
       setError(`Couldn't load data for ${opt.code}.`);
     }
   }
 
   const hasSelection = slots.some((slot) => slot.selected);
-  const activeSlots = slots.filter((slot) => slot.selected && slot.series);
+  const activeSlots = slots
+    .map((slot, i) => ({ slot, color: seriesColor(i) }))
+    .filter(({ slot }) => slot.selected && slot.series);
 
+  // Draw the cumulative + per-interval line charts whenever selection or bucket
+  // changes. Each selected post is one series in its slot color.
   useEffect(() => {
-    if (!cumulativeChartRef.current) return;
-    if (!cumulativeInstanceRef.current) {
-      cumulativeInstanceRef.current = echarts.init(cumulativeChartRef.current);
-    }
-    const chart = cumulativeInstanceRef.current;
+    const specs = [
+      { ref: cumulativeRef, inst: cumulativeInst, key: 'cumulative' },
+      { ref: intervalRef, inst: intervalInst, key: 'interval' },
+    ];
 
-    const series = activeSlots.map((slot, i) => {
-      const filtered = seriesForBucket(slot.series.rows, bucket);
-      return {
-        name: slot.selected.label,
-        type: 'line',
-        showSymbol: false                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               ,
-        smooth: true,
-        data: filtered.cumulative,
-        lineStyle: { width: 3 },
-        itemStyle: { color: colorFor(i) },
-        markPoint: {
-          ...MARK_POINT(colorFor(i)),
-          data: getCrossPostMarks(slot, allPostDates, filtered.cumulative),
+    const cleanups = [];
+    specs.forEach(({ ref, inst, key }) => {
+      if (!ref.current) return;
+      if (!inst.current) inst.current = echarts.init(ref.current);
+      const chart = inst.current;
+
+      const series = activeSlots.map(({ slot, color }) => {
+        const filtered = seriesForBucket(slot.series.rows, bucket);
+        const points = filtered[key];
+        return {
+          name: slot.selected.label,
+          type: 'line',
+          smooth: true,
+          showSymbol: false,
+          data: points,
+          lineStyle: { width: 2.25, color },
+          itemStyle: { color },
+          markPoint: markPoint(color, getCrossPostMarks(slot, allPostDates, points)),
+        };
+      });
+
+      chart.setOption(
+        {
+          backgroundColor: 'transparent',
+          tooltip: brandTooltip,
+          legend: {
+            bottom: 0,
+            data: series.map((s) => s.name),
+            textStyle: { color: BRAND.legend, fontFamily: BRAND.sans, fontSize: 12 },
+            inactiveColor: '#4a4a4a',
+          },
+          grid: { top: 16, left: 8, right: 16, bottom: 56, containLabel: true },
+          xAxis: {
+            type: 'time',
+            axisLine,
+            axisTick: { show: false },
+            splitLine: { show: false },
+            axisLabel: { ...axisLabel, formatter: formatAxisDateTime, rotate: 38 },
+          },
+          yAxis: valueAxis(),
+          series,
         },
+        { notMerge: true }
+      );
+
+      const onClick = (params) => {
+        if (params.componentType === 'markPoint' && params.data?.link) {
+          window.open(params.data.link, '_blank', 'noopener,noreferrer');
+        }
       };
+      chart.on('click', onClick);
+      const onResize = () => chart.resize();
+      window.addEventListener('resize', onResize);
+      cleanups.push(() => {
+        chart.off('click', onClick);
+        window.removeEventListener('resize', onResize);
+      });
     });
 
-    chart.setOption(
-      {
-        tooltip: { trigger: 'axis' },
-        legend: { bottom: 0, data: series.map((s) => s.name) },
-        grid: { top: '10%', left: '5%', right: '5%', bottom: '22%', containLabel: true },
-        xAxis: {
-          type: 'time',
-          name: 'Date',
-          nameLocation: 'middle',
-          nameGap: 60,
-          axisLabel: { formatter: formatAxisDateTime, rotate: 30 },
-        },
-        yAxis: { type: 'value', name: 'Cumulative Views' },
-        series
-      },
-      { notMerge: true }
-    );
-
-    const handleMarkPointClick = (params) => {
-      if (params.componentType === 'markPoint' && params.data?.link) {
-        window.open(params.data.link, '_blank', 'noopener,noreferrer');
-      }
-    };
-    chart.on('click', handleMarkPointClick);
-
-    const handleResize = () => chart.resize();
-    window.addEventListener('resize', handleResize);
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      chart.off('click', handleMarkPointClick);
-    };
+    return () => cleanups.forEach((fn) => fn());
   }, [slots, allPostDates, bucket]);
 
   useEffect(() => {
-    if (!intervalChartRef.current) return;
-    if (!intervalInstanceRef.current) {
-      intervalInstanceRef.current = echarts.init(intervalChartRef.current);
-    }
-    const chart = intervalInstanceRef.current;
-
-    const series = activeSlots.map((slot, i) => {
-      const filtered = seriesForBucket(slot.series.rows, bucket);
-      return {
-        name: slot.selected.label,
-        type: 'line',
-        showSymbol: false,
-        smooth: true,
-        data: filtered.interval,
-        lineStyle: { width: 3 },
-        itemStyle: { color: colorFor(i) },
-        markPoint: {
-          ...MARK_POINT(colorFor(i)),
-          data: getCrossPostMarks(slot, allPostDates, filtered.interval),
-        },
-      };
-    });
-
-    chart.setOption(
-      {
-        tooltip: { trigger: 'axis' },
-        legend: { bottom: 0, data: series.map((s) => s.name) },
-        grid: { top: '10%', left: '5%', right: '5%', bottom: '22%', containLabel: true },
-        xAxis: {
-          type: 'time',
-          name: 'Date',
-          nameLocation: 'middle',
-          nameGap: 60,
-          axisLabel: { formatter: formatAxisDateTime, rotate: 30 },
-        },
-        yAxis: { type: 'value', name: 'Views in Interval' },
-        series,
-      },
-      { notMerge: true }
-    );
-
-    const handleMarkPointClick = (params) => {
-      if (params.componentType === 'markPoint' && params.data?.link) {
-        window.open(params.data.link, '_blank', 'noopener,noreferrer');
-      }
-    };
-    chart.on('click', handleMarkPointClick);
-
-    const handleResize = () => chart.resize();
-    window.addEventListener('resize', handleResize);
     return () => {
-      window.removeEventListener('resize', handleResize);
-      chart.off('click', handleMarkPointClick);
-    };
-  }, [slots, allPostDates, bucket]);
-
-  useEffect(() => {
-    if (!intervalBarChartRef.current) return;
-    if (!intervalBarInstanceRef.current) {
-      intervalBarInstanceRef.current = echarts.init(intervalBarChartRef.current);
-    }
-    const chart = intervalBarInstanceRef.current;
-
-    const series = activeSlots.map((slot, i) => ({
-      name: slot.selected.label,
-      type: 'bar',
-      barMaxWidth: 12,
-      data: seriesForBucket(slot.series.rows, bucket).interval,
-      itemStyle: { color: colorFor(i) },
-    }));
-
-    chart.setOption(
-      {
-        tooltip: { trigger: 'axis' },
-        legend: { bottom: 0, data: series.map((s) => s.name) },
-        grid: { top: '10%', left: '5%', right: '5%', bottom: '22%', containLabel: true },
-        xAxis: {
-          type: 'time',
-          name: 'Date',
-          nameLocation: 'middle',
-          nameGap: 60,
-          axisLabel: { formatter: formatAxisDateTime, rotate: 30 },
-        },
-        yAxis: { type: 'value', name: 'Views in Interval' },
-        series,
-      },
-      { notMerge: true }
-    );
-
-    const handleResize = () => chart.resize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [slots, bucket]);
-
-  useEffect(() => {
-    return () => {
-      cumulativeInstanceRef.current?.dispose();
-      intervalInstanceRef.current?.dispose();
-      intervalBarInstanceRef.current?.dispose();
+      cumulativeInst.current?.dispose();
+      intervalInst.current?.dispose();
     };
   }, []);
 
+  const bucketLabel = BUCKET_OPTIONS.find((o) => o.value === bucket)?.label || bucket;
+
+  // Head-to-head compares the first two selected posts (in their chart colors).
+  const h2hSlots = activeSlots.slice(0, 2);
+  const showH2H = h2hSlots.length === 2;
+  const mA = h2hSlots[0]?.slot.series.metrics;
+  const mB = h2hSlots[1]?.slot.series.metrics;
+  const h2hRows = showH2H
+    ? [
+        { label: 'Views', a: Number(mA.views) || 0, b: Number(mB.views) || 0 },
+        { label: 'Reach', a: Number(mA.reach) || 0, b: Number(mB.reach) || 0 },
+        { label: 'Likes', a: Number(mA.likes) || 0, b: Number(mB.likes) || 0 },
+        { label: 'Saves', a: Number(mA.saves) || 0, b: Number(mB.saves) || 0 },
+        { label: 'Shares', a: Number(mA.shares) || 0, b: Number(mB.shares) || 0 },
+        { label: 'Follows', a: Number(mA.follows) || 0, b: Number(mB.follows) || 0 },
+        { label: 'Engagement rate', a: engRate(mA), b: engRate(mB), pct: true },
+      ]
+    : [];
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row flex-wrap gap-4">
+    <div className="flex flex-col gap-7">
+      {/* Search + add */}
+      <div className="flex flex-wrap items-start gap-4 border border-[#1f1f1f] bg-[#121212] px-6 py-5">
         {slots.map((slot, index) => (
           <PostSearchBox
             key={slot.id}
             index={index}
             query={slot.query}
+            color={seriesColor(index)}
             onQueryChange={(v) => handleQueryChange(index, v)}
             onSelect={(opt) => handleSelect(index, opt)}
             excludeCodes={slots
@@ -389,61 +343,122 @@ export default function ComparePost() {
           <button
             type="button"
             onClick={addSlot}
-            className="shrink-0 px-4 py-2 rounded border border-solid border-[#FFFFFF] bg-[#0D0D0D] text-sm text-[#FFFFFF] hover:bg-[#EBFFA8] hover:text-[#0D0D0D] hover:border-[#0D0D0D]"
+            className="flex-none border border-[#2a2a2a] bg-black px-4 py-[11px] font-display text-[11px] font-bold uppercase tracking-[0.12em] text-white transition-all hover:border-[#ebffa8] hover:bg-[#ebffa8] hover:text-[#0d0d0d]"
           >
             + Add post
           </button>
         )}
       </div>
 
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {error && <p className="text-sm text-[#ff6549]">{error}</p>}
 
-      {hasSelection && (
-        <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600">
-          <span className="font-medium">Bucket size:</span>
-          <select
-            value={bucket}
-            onChange={(e) => setBucket(e.target.value)}
-            className="border border-gray-200 rounded px-2 py-1 text-gray-700"
-          >
-            {BUCKET_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
+      {/* Bucket controls */}
+      <div className="flex flex-wrap items-center gap-4 border border-[#1f1f1f] bg-[#121212] px-6 py-4">
+        <span className="font-display text-[10px] font-bold uppercase tracking-[0.14em] text-[#67696f]">
+          Bucket size
+        </span>
+        <div className="flex flex-wrap gap-2">
+          {BUCKET_OPTIONS.map((o) => {
+            const active = bucket === o.value;
+            return (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => setBucket(o.value)}
+                className={`border px-3.5 py-2 font-mono text-xs transition-all ${
+                  active
+                    ? 'border-[#ebffa8] bg-[#1f1f1f] text-[#ebffa8]'
+                    : 'border-[#2a2a2a] bg-transparent text-[#e8e8e8] hover:border-[rgba(235,255,168,0.35)] hover:text-[#ebffa8]'
+                }`}
+              >
                 {o.label}
-              </option>
-            ))}
-          </select>
-          <span className="text-gray-400 text-xs">
-            combines rows into buckets of this size, up to where the data's own granularity reaches it
-          </span>
+              </button>
+            );
+          })}
+        </div>
+        <span className="text-xs text-[#67696f]">
+          Rows combine into buckets of this size, up to the data&apos;s own granularity.
+        </span>
+      </div>
+
+      {/* Cumulative chart */}
+      <div className="border border-[#1f1f1f] bg-[#121212]">
+        <div className="flex items-baseline justify-between border-b border-[#1f1f1f] px-6 py-5">
+          <h4 className="font-display text-[16px] font-semibold text-white">Cumulative Views</h4>
+          <span className="text-xs text-[#67696f]">Bucket: {bucketLabel}</span>
+        </div>
+        <div className="px-6 pb-6 pt-5">
+          {hasSelection ? (
+            <div ref={cumulativeRef} className="h-[360px] w-full" />
+          ) : (
+            <p className="py-16 text-center text-sm text-[#67696f]">Search for posts above to compare.</p>
+          )}
+        </div>
+      </div>
+
+      {/* Interval chart */}
+      <div className="border border-[#1f1f1f] bg-[#121212]">
+        <div className="flex items-baseline justify-between border-b border-[#1f1f1f] px-6 py-5">
+          <h4 className="font-display text-[16px] font-semibold text-white">Views per Interval</h4>
+          <span className="text-xs text-[#67696f]">Bucket: {bucketLabel}</span>
+        </div>
+        <div className="px-6 pb-6 pt-5">
+          {hasSelection ? (
+            <div ref={intervalRef} className="h-[340px] w-full" />
+          ) : (
+            <p className="py-16 text-center text-sm text-[#67696f]">Search for posts above to compare.</p>
+          )}
+        </div>
+      </div>
+
+      {/* Head to Head (first two selected posts) */}
+      {showH2H && (
+        <div className="border border-[#232323] bg-black">
+          <div className="border-b border-[#1f1f1f] px-6 py-5">
+            <h4 className="font-display text-[16px] font-semibold text-white">Head to Head</h4>
+          </div>
+          <div className="grid grid-cols-[1.1fr_1fr_1fr_0.9fr] items-center border-b border-[#1f1f1f] px-6 py-3">
+            <span className="font-display text-[10px] font-bold uppercase tracking-[0.14em] text-[#67696f]">
+              Metric
+            </span>
+            <span className="flex items-center justify-end gap-1.5 text-right text-[11px] text-[#e8e8e8]">
+              <span className="block h-2 w-2 flex-none" style={{ background: h2hSlots[0].color }} />
+              {labelFor(h2hSlots[0].slot.selected.code)}
+            </span>
+            <span className="flex items-center justify-end gap-1.5 text-right text-[11px] text-[#e8e8e8]">
+              <span className="block h-2 w-2 flex-none" style={{ background: h2hSlots[1].color }} />
+              {labelFor(h2hSlots[1].slot.selected.code)}
+            </span>
+            <span className="text-right font-display text-[10px] font-bold uppercase tracking-[0.14em] text-[#67696f]">
+              Delta
+            </span>
+          </div>
+          {h2hRows.map((row) => {
+            const delta = row.b === 0 ? 0 : ((row.a - row.b) / row.b) * 100;
+            const positive = delta >= 0;
+            return (
+              <div
+                key={row.label}
+                className="grid grid-cols-[1.1fr_1fr_1fr_0.9fr] items-center border-b border-[#161616] px-6 py-3.5"
+              >
+                <span className="text-[13px] text-[#e8e8e8]">{row.label}</span>
+                <span className="text-right font-mono text-sm text-white">
+                  {row.pct ? row.a.toFixed(1) + '%' : fmt(row.a)}
+                </span>
+                <span className="text-right font-mono text-sm text-white">
+                  {row.pct ? row.b.toFixed(1) + '%' : fmt(row.b)}
+                </span>
+                <span
+                  className="text-right font-mono text-sm"
+                  style={{ color: positive ? BRAND.accent : BRAND.subtle }}
+                >
+                  {(positive ? '+' : '') + delta.toFixed(0) + '%'}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
-
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Cumulative Views Comparison</h2>
-        {hasSelection ? (
-          <div ref={cumulativeChartRef} className="w-full h-[450px]" />
-        ) : (
-          <p className="text-gray-400 text-sm">Select posts above to compare.</p>
-        )}
-      </div>
-
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Views per Interval Comparison</h2>
-        {hasSelection ? (
-          <div ref={intervalChartRef} className="w-full h-[400px]" />
-        ) : (
-          <p className="text-gray-400 text-sm">Select posts above to compare.</p>
-        )}
-      </div>
-
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Reaction per Interval (Bar Comparison)</h2>
-        {hasSelection ? (
-          <div ref={intervalBarChartRef} className="w-full h-[400px]" />
-        ) : (
-          <p className="text-gray-400 text-sm">Select posts above to compare.</p>
-        )}
-      </div>
     </div>
   );
 }

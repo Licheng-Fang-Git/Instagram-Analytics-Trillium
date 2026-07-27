@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as echarts from 'echarts';
 import { normalizeRows, bucketByIntervalLength, formatAxisDateTime, BUCKET_OPTIONS } from '@/lib/chartAggregation';
+import { BRAND, brandTooltip, valueAxis, axisLabel, axisLine } from '@/lib/chartTheme';
 
 export default function InidiviualCharts({ data }) {
   const ASSUMED_YEAR = 2026;
@@ -19,8 +20,6 @@ export default function InidiviualCharts({ data }) {
 
     const handleResize = () => chart.resize();
     window.addEventListener('resize', handleResize);
-    // Resize when the container itself gets/changes size — covers the case
-    // where the chart initializes before the flex layout has settled its width.
     const ro = new ResizeObserver(() => chart.resize());
     ro.observe(chartRef.current);
 
@@ -41,49 +40,65 @@ export default function InidiviualCharts({ data }) {
     let cumulative = [[]];
     let interval = [[]];
 
-    if (bucket === 'none'){
-
-      data.forEach((one_row) => {raw_cumulative.push(one_row['Cumulative Views']);
-                                  raw_interval.push(one_row['Views in Interval']);
-                                  const rawDateStr = one_row['Interval Start'];
-                                  const timestamp = new Date(`${rawDateStr} ${ASSUMED_YEAR}`).getTime();
-                                  timeEnds.push(formatAxisDateTime(timestamp))});
-
-    }else{
+    if (bucket === 'none') {
+      data.forEach((one_row) => {
+        raw_cumulative.push(one_row['Cumulative Views']);
+        raw_interval.push(one_row['Views in Interval']);
+        const rawDateStr = one_row['Interval Start'];
+        const timestamp = new Date(`${rawDateStr} ${ASSUMED_YEAR}`).getTime();
+        timeEnds.push(formatAxisDateTime(timestamp));
+      });
+    } else {
       const rows = normalizeRows(data);
       const result = bucketByIntervalLength(rows, bucket);
       cumulative = result.cumulative;
       interval = result.interval;
     }
 
-
     chart.setOption(
       {
         backgroundColor: 'transparent',
-        tooltip: { trigger: 'axis' },
-        legend: { data: ['Views in Interval', 'Cumulative Views'], 
-                  bottom: 0,     
-                  textStyle: {
-                    color: '#dfdecc',
-                    fontFamily: 'sans-serif'
-                  }},
-        grid: { top: '15%', left: '5%', right: '5%', bottom: '18%', containLabel: true },
+        tooltip: brandTooltip,
+        grid: { top: 40, left: 12, right: 18, bottom: 44, containLabel: true },
         xAxis: {
           type: bucket === 'none' ? 'category' : 'time',
           data: bucket === 'none' ? timeEnds : undefined,
-          nameTextStyle: {color:'dfdecc'},
-          axisLabel: bucket === 'none' ? { color: '#a0a0a0', rotate:30 } : { formatter: formatAxisDateTime, rotate: 30 },
+          axisLine,
+          axisTick: { show: false },
+          splitLine: { show: false },
+          axisLabel:
+            bucket === 'none'
+              ? { ...axisLabel, rotate: 38, color: '#F5F5F5 ' }
+              : { ...axisLabel, formatter: formatAxisDateTime, rotate: 38, color:'#F5F5F5' },
         },
         yAxis: [
-          { type: 'value', name: 'Views in Interval', position: 'left', axisLabel: { color: '#dfdecc', formatter: '{value}' }, nameTextStyle:{color:'#dfdecc'} },
-          { type: 'value', name: 'Cumulative Views', position: 'right', axisLabel : {color: '#dfdecc' }, nameTextStyle: {color:'dfdecc'}},
+          {
+            type: 'value',
+            name: 'Views in Time Interval',
+            position: 'left',
+            nameLocation: 'end',
+            nameGap: 14,
+            axisLabel: { color: '#e8e8e8', formatter: '{value}' },
+            // align:'left' anchors the title at the axis line so it extends
+            // rightward into the plot instead of overflowing the left edge.
+            nameTextStyle: { color: '#dfdecc', align: 'left' },
+          },
+          {
+            type: 'value',
+            name: 'Cumulative Views',
+            position: 'right',
+            nameLocation: 'end',
+            nameGap: 14,
+            axisLabel: { color: '#e8e8e8' },
+            nameTextStyle: { color: '#dfdecc', align: 'right' },
+          },
         ],
         series: [
           {
             name: 'Views in Interval',
             type: 'bar',
             data: bucket === 'none' ? raw_interval : interval,
-            itemStyle: { color: '#eab308' },
+            itemStyle: { color: BRAND.accent, opacity: 0.85 },
             barMaxWidth: 24,
           },
           {
@@ -92,9 +107,9 @@ export default function InidiviualCharts({ data }) {
             yAxisIndex: 1,
             data: bucket === 'none' ? raw_cumulative : cumulative,
             smooth: true,
-            symbolSize: 5,
-            itemStyle: { color: '#10b981' },
-            lineStyle: { width: 3 },
+            showSymbol: true,
+            itemStyle: { color: BRAND.beige },
+            lineStyle: { width: 2, color: BRAND.beige },
           },
         ],
       },
@@ -103,18 +118,20 @@ export default function InidiviualCharts({ data }) {
   }, [data, bucket]);
 
   return (
-    <div className="bg-[#1c1c1c] text-white p-6 rounded-xl shadow-sm border border-gray-200">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-medium tracking-wide text-[#dfdecc]">Financial & User Growth</h2>
-        <label className="flex items-center gap-2 text-xs text-[#dfdecc]">
-          Bucket size:
+    <div className="border border-[#232323] bg-black">
+      <div className="flex items-center justify-between border-b border-[#1f1f1f] px-6 py-5">
+        <h4 className="font-display text-[16px] font-semibold text-white">View Growth</h4>
+        <label className="flex items-center gap-2.5">
+          <span className="font-display text-[10px] font-bold uppercase tracking-[0.14em] text-[#67696f]">
+            Bucket size
+          </span>
           <select
             value={bucket}
             onChange={(e) => setBucket(e.target.value)}
-            className="border border-gray-200 rounded px-2 py-1 text-[#dfdecc] hover:border-[#ebffa8]"
+            className="border border-[#2a2a2a] bg-[#0d0d0d] px-2.5 py-1.5 text-[13px] text-white"
           >
             {BUCKET_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value} className='text-[#0d0d0d]'>
+              <option key={o.value} value={o.value} className="text-[#FFFFFF]">
                 {o.label}
               </option>
             ))}
@@ -122,8 +139,20 @@ export default function InidiviualCharts({ data }) {
         </label>
       </div>
 
-      {/* Target element initialized by ECharts hooks */}
-      <div ref={chartRef} className="w-full h-[450px] " />
+      <div className="px-6 pb-3 pt-5">
+        <div ref={chartRef} className="h-[360px] w-full" />
+      </div>
+
+      <div className="flex gap-6 px-6 pb-5 font-display text-[11px] uppercase tracking-[0.06em] text-[#cfcfcf]">
+        <span className="flex items-center gap-2">
+          <span className="block h-2.5 w-3.5 bg-[#ebffa8]" />
+          Views in interval
+        </span>
+        <span className="flex items-center gap-2">
+          <span className="block h-0.5 w-3.5 bg-[#d9d4cb]" />
+          Cumulative views
+        </span>
+      </div>
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import Papa from 'papaparse';
 import { normalizeRows } from '@/lib/chartAggregation';
+import { getPostMetrics } from '@/app/content.js';
 
 const POST_FILES = {
     ditl2026: 'Day_in_the_Life',
@@ -50,6 +51,65 @@ export async function getPostSeries(postCode) {
     // Return compact per-row data (timestamp, native interval length, views,
     // cumulative) so the client can re-bucket the charts to any target size.
     return { rows: normalizeRows(data) };
+}
+
+// Everything the Compare view needs for one post: the re-bucketable time-series
+// rows, the post's Instagram link, and its aggregate metrics (views/reach/likes/
+// etc.) for the slot cards and the head-to-head table.
+export async function getPostSummary(postCode) {
+    const fileName = POST_FILES[postCode];
+    if (!fileName) {
+        throw new Error(`Unknown post code: ${postCode}`);
+    }
+
+    const SPREADSHEET_ID = '18wYFbvgo3NtOUvJt-wHQct7Pz18KoRYNaCyAm8t45R4';
+    const fileContent = await getGoogleSheetAsCSV(SPREADSHEET_ID, fileName);
+
+    const { data } = Papa.parse(fileContent, {
+        header: true,
+        dynamicTyping: true,
+        skipEmptyLines: true,
+    });
+
+    const link = data[0]?.Link?.trim() || null;
+    const metrics = await getPostMetrics({ post_link: link });
+
+    return { rows: normalizeRows(data), link, metrics };
+}
+
+// Aggregate metrics for every post, for the overview "Top Posts" table.
+// Fetches the shared Content sheet once, then each post's own sheet just for
+// its Instagram link, and matches the two on permalink.
+export async function getAllPostSummaries() {
+    const SPREADSHEET_ID = '18wYFbvgo3NtOUvJt-wHQct7Pz18KoRYNaCyAm8t45R4';
+
+    const parse = (csv) =>
+        csv ? Papa.parse(csv, { header: true, dynamicTyping: true, skipEmptyLines: true }).data : [];
+
+    const contentCsv = await getGoogleSheetAsCSV(SPREADSHEET_ID, 'Content');
+    const content = parse(contentCsv);
+    const num = (v) => Number(v) || 0;
+
+    const entries = await Promise.all(
+        Object.entries(POST_FILES).map(async ([code, sheetName]) => {
+            const data = parse(await getGoogleSheetAsCSV(SPREADSHEET_ID, sheetName));
+            const link = data[0]?.Link?.trim() || null;
+            const row = link ? content.find((r) => r['Permalink'] === link) : null;
+            return {
+                code,
+                link,
+                views: num(row?.['Views']),
+                reach: num(row?.['Reach']),
+                likes: num(row?.['Likes']),
+                shares: num(row?.['Shares']),
+                follows: num(row?.['Follows']),
+                comments: num(row?.['Comments']),
+                saves: num(row?.['Saves']),
+            };
+        })
+    );
+
+    return entries;
 }
 
 // The "posted at" timestamp and Instagram link for every post, keyed by code

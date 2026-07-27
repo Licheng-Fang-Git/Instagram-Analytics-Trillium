@@ -1,25 +1,18 @@
 import Papa from 'papaparse';
-import InidiviualCharts from '@/components/InidiviualCharts';
-import MetricCards from '@/components/MetricCards';
-import InstagramEmbed from '@/components/InstagramEmbed';
-import {getPostMetrics} from '@/app/content.js';
+import PostDashboard from '@/components/PostDashboard';
+import { getPostMetrics } from '@/app/content.js';
 
-async function getGoogleSheetAsCSV(sheetId, sheetName = 'Meet The Interns') {
-  // Construct the export URL pointing to the CSV export endpoint
+async function getGoogleSheetAsCSV(sheetId, sheetName) {
+  // Export the given sheet tab as CSV from Google Sheets.
   const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${sheetName}`;
-  
   try {
     const response = await fetch(url);
     if (!response.ok) {
       throw new Error(`HTTP error! Status: ${response.status}`);
     }
-    
-    // This string contains your raw CSV data
-    const csvData = await response.text(); 
-    return csvData;
-    
+    return await response.text();
   } catch (error) {
-    console.error("Failed to fetch sheet data:", error);
+    console.error('Failed to fetch sheet data:', error);
   }
 }
 
@@ -28,29 +21,27 @@ async function getGoogleSheetAsCSV(sheetId, sheetName = 'Meet The Interns') {
 export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage() {
-    const SPREADSHEET_ID = '18wYFbvgo3NtOUvJt-wHQct7Pz18KoRYNaCyAm8t45R4';
-    const fileContent = await getGoogleSheetAsCSV(SPREADSHEET_ID, 'Day_in_the_Life');
+  const SPREADSHEET_ID = '18wYFbvgo3NtOUvJt-wHQct7Pz18KoRYNaCyAm8t45R4';
+  const fileContent = await getGoogleSheetAsCSV(SPREADSHEET_ID, 'Day_in_the_Life');
 
-    // 2. Parse the CSV file string to a JavaScript array of objects
-    const parsed = Papa.parse(fileContent, {
+  const parsed = Papa.parse(fileContent, {
     header: true,
-    dynamicTyping: true, // Automatically turns string numbers into JS numbers
+    dynamicTyping: true,
     skipEmptyLines: true,
-    });
+  });
 
-    const chartData = parsed.data;
-    const link = chartData[0]?.Link;
-    const postMetrics = await getPostMetrics({post_link: link});
+  const chartData = parsed.data;
+  const link = chartData[0]?.Link;
+  const postMetrics = await getPostMetrics({ post_link: link });
 
-    return (
-    <div className="p-8 max-w-6xl mx-auto space-y-6">
-        <div>
-        <h1 className="text-3xl font-bold tracking-tight text-gray-900">DITL Dashboard</h1>
-        </div>
-        <MetricCards data={postMetrics} />
-        {/* 3. Send parsed data straight to the chart component */}
-        <InidiviualCharts data={chartData} />
-        <div> <InstagramEmbed url={link} /></div>
-    </div>
-    );
+  return (
+    <PostDashboard
+      title="Intern Day Reel"
+      slug="dit2026"
+      month="July"
+      metrics={postMetrics}
+      chartData={chartData}
+      link={link}
+    />
+  );
 }
