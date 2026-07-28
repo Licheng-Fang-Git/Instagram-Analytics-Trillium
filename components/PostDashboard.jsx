@@ -8,10 +8,19 @@ import Funnel from '@/components/Funnel';
 // two-column row of the Funnel and "The Post" card (Instagram embed).
 export default function PostDashboard({ title, slug, month, metrics, chartData, link }) {
   const eyebrow = `${month} 2026 · ${slug}`;
-  const date = chartData[0]["Interval Start"].substring(8,11);
+
+  // "Interval Start" looks like "Thu Jul 2 12:06 PM" — split on spaces so the
+  // day is read as a plain number regardless of one or two digits (fixes the
+  // "2 1" / "8," artifacts from fixed-index substrings).
   const data_length = chartData.length;
-  const upToDate = chartData[data_length-1]["Interval Start"].substring(4,11);
-  
+  const startParts = String(chartData[0]?.['Interval Start'] ?? '').split(' ');
+  const endParts = String(chartData[data_length - 1]?.['Interval Start'] ?? '').split(' ');
+  const date = (startParts[2] ?? '').replace(/\D/g, '');
+  const upToMonth = endParts[1]
+    ? new Date(`${endParts[1]} 1, 2026`).toLocaleDateString('en-US', { month: 'long' })
+    : month;
+  const upToDate = (endParts[2] ?? '').replace(/\D/g, '');
+
 
   return (
     <div className="max-w-[1440px] px-12 pb-[72px] pt-10">
@@ -21,7 +30,7 @@ export default function PostDashboard({ title, slug, month, metrics, chartData, 
           <h1 className="m-0 font-serif text-[46px] leading-[1.08] tracking-[-0.01em] text-white">
             {title}
           </h1>
-          <p className="m-0 text-[15px] text-[#787878]">{`Publication ${month} ${date} 2026. Post Metric through to ${upToDate} 2026`}</p>
+          <p className="m-0 text-[15px] text-[#787878]">{`Publication ${month} ${date}, 2026. Post metrics up to ${upToMonth} ${upToDate}, 2026`}</p>
         </header>
 
         <MetricCards data={metrics} />
