@@ -112,6 +112,26 @@ export async function getAllPostSummaries() {
     return entries;
 }
 
+// Per-post normalized rows for the "Best Time to Post" heatmap. Each entry is
+// an array of { tEnd, intervalLength, views, cumulative } so the client can
+// re-tile each post by its native Interval Length (via bucketByIntervalLength)
+// and fold the resulting buckets onto a day-of-week x time-of-day grid.
+export async function getAllTimingSeries() {
+    const SPREADSHEET_ID = '18wYFbvgo3NtOUvJt-wHQct7Pz18KoRYNaCyAm8t45R4';
+
+    const entries = await Promise.all(
+        Object.entries(POST_FILES).map(async ([code, sheetName]) => {
+            const csv = await getGoogleSheetAsCSV(SPREADSHEET_ID, sheetName);
+            const data = csv
+                ? Papa.parse(csv, { header: true, dynamicTyping: true, skipEmptyLines: true }).data
+                : [];
+            return [code, normalizeRows(data)];
+        })
+    );
+
+    return Object.fromEntries(entries);
+}
+
 // The "posted at" timestamp and Instagram link for every post, keyed by code
 // — used so a selected post's chart can mark when OTHER posts (selected or
 // not) went up, and link straight to them. Pulls from the same Google Sheet

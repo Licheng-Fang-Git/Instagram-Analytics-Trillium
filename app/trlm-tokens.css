@@ -187,7 +187,7 @@ h3 { font-size: var(--fs-h3); }
 h4 { font-size: var(--fs-h4); font-family: var(--ff-sans-display); font-weight: var(--fw-semi); letter-spacing: var(--ls-normal); }
 
 .trlm-display  { font-family: var(--ff-serif-display); font-size: var(--fs-display); line-height: var(--lh-tight); letter-spacing: var(--ls-heading); font-weight: var(--fw-regular); }
-.trlm-eyebrow  { font-family: var(--ff-sans-display); font-size: var(--fs-eyebrow); text-transform: uppercase; letter-spacing: var(--ls-ui-caps); font-weight: var(--fw-semi); color: var(--fg-muted); }
+.trlm-eyebrow  { font-family: var(--ff-sans-display); font-size: var(--fs-eyebrow); text-transform: uppercase; letter-spacing: var(--ls-ui-caps); font-weight: var(--fw-semi); color: var(--fg-inverse); }
 .trlm-lead     { font-family: var(--ff-sans-body); font-size: var(--fs-lg); line-height: var(--lh-body); color: var(--fg-muted); text-wrap: pretty; }
 .trlm-caption  { font-size: var(--fs-sm); color: var(--fg-muted); }
 

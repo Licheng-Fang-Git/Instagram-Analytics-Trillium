@@ -98,9 +98,10 @@ export default function Sidebar() {
         </a>
       </div>
 
-      {/* Overview + Compare */}
+      {/* Overview + Best Time to Post + Compare */}
       <nav className="flex flex-col gap-0.5 px-3">
         <NavItem href="/dashboard" label="Overview" active={overviewActive} />
+        <NavItem href="/best_time_to_post" label="Best Time to Post" active={pathname === '/best_time_to_post'} />
         <NavItem href="/compare" label="Compare Posts" active={pathname === '/compare'} />
       </nav>
 
