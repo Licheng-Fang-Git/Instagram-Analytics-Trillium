@@ -68,7 +68,7 @@ export default async function DashboardPage() {
             Dashboard
           </h1>
           <p className="m-0 max-w-[60ch] text-[15px] text-[#787878]">
-            Overview of account metrics pulled live from the Trillium export.
+            {`Metrics pulled up to ${chartData[chartData.length-1]['Date']} `}
           </p>
         </header>
         <OverviewCharts data={chartData} />
