@@ -6,7 +6,6 @@ export const dynamic = 'force-dynamic';
 
 export default async function BestTimeToPostPage() {
   const series = await getAllTimingSeries();
-  console.log(series)
 
   return (
     <div className="max-w-[1440px] px-12 pb-[72px] pt-10">

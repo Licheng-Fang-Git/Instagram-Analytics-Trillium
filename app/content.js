@@ -48,7 +48,7 @@ export async function getPostMetrics({ post_link } = {}) {
         likes: match['Likes'] ?? 0,
         shares: match['Shares'] ?? 0,
         follows: match['Follows'] ?? 0,
-        comments: match['Comments'] ?? 0,
+        comments: match['Comment'] ?? 0,
         saves: match['Saves'] ?? 0,
     };
 }

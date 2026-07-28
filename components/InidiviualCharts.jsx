@@ -2,8 +2,16 @@
 
 import { useEffect, useRef, useState } from 'react';
 import * as echarts from 'echarts';
-import { normalizeRows, bucketByIntervalLength, formatAxisDateTime, BUCKET_OPTIONS } from '@/lib/chartAggregation';
+import { normalizeRows, bucketByIntervalLength, formatAxisDateTime, formatAxisDateTimeShort, BUCKET_OPTIONS } from '@/lib/chartAggregation';
 import { BRAND, brandTooltip, valueAxis, axisLabel, axisLine } from '@/lib/chartTheme';
+
+// Shorten a full "Thu Jun 25 12:04 PM" category label to "Jun 25 12p" for the
+// axis, while the category data itself stays full for the hover tooltip.
+function shortCat(full) {
+  const p = String(full).split(' ');
+  if (p.length < 5) return full;
+  return `${p[1]} ${p[2]} ${p[3].split(':')[0]}${p[4][0].toLowerCase()}`;
+}
 
 export default function InidiviualCharts({ data }) {
   const ASSUMED_YEAR = 2026;
@@ -59,7 +67,7 @@ export default function InidiviualCharts({ data }) {
       {
         backgroundColor: 'transparent',
         tooltip: brandTooltip,
-        grid: { top: 40, left: 12, right: 18, bottom: 44, containLabel: true },
+        grid: { top: 40, left: 20, right: 18, bottom: 24, containLabel: true },
         xAxis: {
           type: bucket === 'none' ? 'category' : 'time',
           data: bucket === 'none' ? timeEnds : undefined,
@@ -68,8 +76,8 @@ export default function InidiviualCharts({ data }) {
           splitLine: { show: false },
           axisLabel:
             bucket === 'none'
-              ? { ...axisLabel, rotate: 38, color: '#F5F5F5 ' }
-              : { ...axisLabel, formatter: formatAxisDateTime, rotate: 38, color:'#F5F5F5' },
+              ? { ...axisLabel, rotate: 38, color: '#F5F5F5', hideOverlap: true, interval: 'auto', formatter: shortCat }
+              : { ...axisLabel, formatter: formatAxisDateTimeShort, rotate: 38, color: '#F5F5F5', hideOverlap: true },
         },
         yAxis: [
           {
@@ -140,7 +148,7 @@ export default function InidiviualCharts({ data }) {
       </div>
 
       <div className="px-6 pb-3 pt-5">
-        <div ref={chartRef} className="h-[360px] w-full" />
+        <div ref={chartRef} className="h-[460px] w-full" />
       </div>
 
       <div className="flex gap-6 px-6 pb-5 font-display text-[11px] uppercase tracking-[0.06em] text-[#cfcfcf]">

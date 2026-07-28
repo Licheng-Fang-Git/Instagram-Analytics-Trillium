@@ -12,6 +12,7 @@ export default function MetricCards({ data }) {
       ? (((data.likes + data.saves + data.comments) / data.reach) * 100).toFixed(1) + '%'
       : '0.0%';
 
+  
   const metrics = [
     { label: 'Views', value: fmt(data.views) },
     { label: 'Reach', value: fmt(data.reach) },

@@ -5,7 +5,7 @@ import * as echarts from 'echarts';
 import { getPostSummary, getAllPostDates } from '@/app/compare/actions';
 import {
   interpolateValue,
-  formatAxisDateTime,
+  formatAxisDateTimeShort,
   bucketByIntervalLength,
   BUCKET_OPTIONS,
 } from '@/lib/chartAggregation';
@@ -261,13 +261,13 @@ export default function ComparePost() {
             textStyle: { color: BRAND.legend, fontFamily: BRAND.sans, fontSize: 12 },
             inactiveColor: '#4a4a4a',
           },
-          grid: { top: 16, left: 8, right: 16, bottom: 56, containLabel: true },
+          grid: { top: 16, left: 8, right: 16, bottom: 40, containLabel: true },
           xAxis: {
             type: 'time',
             axisLine,
             axisTick: { show: false },
             splitLine: { show: false },
-            axisLabel: { ...axisLabel, formatter: formatAxisDateTime, rotate: 38 },
+            axisLabel: { ...axisLabel, formatter: formatAxisDateTimeShort, rotate: 38, hideOverlap: true },
           },
           yAxis: valueAxis(),
           series,
@@ -389,7 +389,7 @@ export default function ComparePost() {
         </div>
         <div className="px-6 pb-6 pt-5">
           {hasSelection ? (
-            <div ref={cumulativeRef} className="h-[360px] w-full" />
+            <div ref={cumulativeRef} className="h-[440px] w-full" />
           ) : (
             <p className="py-16 text-center text-sm text-[#67696f]">Search for posts above to compare.</p>
           )}
@@ -404,7 +404,7 @@ export default function ComparePost() {
         </div>
         <div className="px-6 pb-6 pt-5">
           {hasSelection ? (
-            <div ref={intervalRef} className="h-[340px] w-full" />
+            <div ref={intervalRef} className="h-[440px] w-full" />
           ) : (
             <p className="py-16 text-center text-sm text-[#67696f]">Search for posts above to compare.</p>
           )}
