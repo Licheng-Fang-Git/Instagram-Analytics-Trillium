@@ -1,13 +1,15 @@
 import MetricCards from '@/components/MetricCards';
 import InidiviualCharts from '@/components/InidiviualCharts';
-import InstagramEmbed from '@/components/InstagramEmbed';
+import InstagramImage from '@/components/InstagramImage';
 import Funnel from '@/components/Funnel';
+import { getInstagramImage } from '@/app/compare/actions';
 
 // One shared layout for every post-detail page, matching the Claude design:
 // eyebrow + serif title, a stat grid, the View Growth combo chart, and a
 // two-column row of the Funnel and "The Post" card (Instagram embed).
-export default function PostDashboard({ title, slug, month, metrics, chartData, link }) {
+export default async function PostDashboard({ title, slug, month, metrics, chartData, link }) {
   const eyebrow = `${month} 2026 · ${slug}`;
+  const imageSrc = await getInstagramImage(link);
 
   // "Interval Start" looks like "Thu Jul 2 12:06 PM" — split on spaces so the
   // day is read as a plain number regardless of one or two digits (fixes the
@@ -42,11 +44,11 @@ export default function PostDashboard({ title, slug, month, metrics, chartData, 
           <div className="flex flex-col gap-4 border border-[#1f1f1f] bg-[#121212] p-6">
             <h4 className="font-display text-[16px] font-semibold text-white">The Post</h4>
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[#2a2a2a] bg-black font-serif text-lg text-[#ebffa8]">
+              <a href="https://www.instagram.com/trilliumtrading/"><div className="flex h-10 w-10 items-center justify-center rounded-full border border-[#2a2a2a] bg-black font-serif text-lg text-[#ebffa8]">
                 T
-              </div>
+              </div></a>
               <div className="flex flex-col">
-                <span className="text-sm text-white">trilliumtrading</span>
+                <a href="https://www.instagram.com/trilliumtrading/"> <span className="text-sm text-white">trilliumtrading</span> </a>
                 <span className="text-xs text-[#67696f]">@trilliumtrading</span>
               </div>
               <a
@@ -58,15 +60,7 @@ export default function PostDashboard({ title, slug, month, metrics, chartData, 
                 View post
               </a>
             </div>
-            {link ? (
-              <InstagramEmbed url={link} />
-            ) : (
-              <div className="flex aspect-[4/5] items-center justify-center border border-dashed border-[#2f2f2f] bg-[#0d0d0d] p-6 text-center">
-                <span className="max-w-[26ch] text-[13px] text-[#67696f]">
-                  The post creative will appear here once a link is available.
-                </span>
-              </div>
-            )}
+            <InstagramImage src={imageSrc} url={link} />
           </div>
 
           <Funnel data={metrics} />

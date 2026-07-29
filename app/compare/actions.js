@@ -112,6 +112,50 @@ export async function getAllPostSummaries() {
     return entries;
 }
 
+// Resolve a post's preview image server-side. Prefers the embed's media image,
+// which is the real, uncropped post image; og:image is only a center-cropped
+// square for photos/carousels (it cuts off the sides), so it's just a fallback.
+// Returns null on any failure so the UI can fall back cleanly. Fetched fresh
+// (no cache) because scontent URLs carry a short-lived expiry token.
+export async function getInstagramImage(link) {
+    const m = String(link || '').match(/instagram\.com\/(?:p|reel|tv)\/([^/?#]+)/i);
+    if (!m) return null;
+    const code = m[1];
+
+    const fetchText = async (url) => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 8000);
+        try {
+            const res = await fetch(url, {
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+                signal: controller.signal,
+                cache: 'no-store',
+            });
+            return res.ok ? await res.text() : null;
+        } catch {
+            return null;
+        } finally {
+            clearTimeout(timer);
+        }
+    };
+
+    // Preferred: the embed's <img class="EmbeddedMediaImage"> — full, uncropped.
+    const embed = await fetchText(`https://www.instagram.com/p/${code}/embed/captioned/`);
+    if (embed) {
+        const tag = embed.match(/<img[^>]*EmbeddedMediaImage[^>]*>/i);
+        const src = tag && tag[0].match(/src="([^"]+)"/i);
+        if (src) return src[1].replace(/&amp;/g, '&');
+    }
+
+    // Fallback: og:image from the post page (square-cropped for photos).
+    const page = await fetchText(`https://www.instagram.com/p/${code}/`);
+    if (page) {
+        const og = page.match(/<meta property="og:image" content="([^"]+)"/i);
+        if (og) return og[1].replace(/&amp;/g, '&');
+    }
+    return null;
+}
+
 // Per-post normalized rows for the "Best Time to Post" heatmap. Each entry is
 // an array of { tEnd, intervalLength, views, cumulative } so the client can
 // re-tile each post by its native Interval Length (via bucketByIntervalLength)
