@@ -6,7 +6,6 @@ import { usePathname } from 'next/navigation';
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard' },
-  { href: '/best_time_to_post', label: 'Best Time to Post' },
   { href: '/compare', label: 'Compare Posts' },
 ];
 
