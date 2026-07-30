@@ -109,7 +109,7 @@ function PostSearchBox({ index, query, onQueryChange, onSelect, excludeCodes, is
           type="text"
           value={query}
           placeholder={`Search post ${index + 1}… (e.g. nasdaq2026)`}
-          className={`w-full rounded-full border border-[#2a2a2a] bg-[#0d0d0d] px-4 py-[11px] font-mono text-[13px] text-white placeholder:text-[#e6e6e6] focus:border-[#ebffa8] focus:outline-none ${
+          className={`w-full border border-[#2a2a2a] bg-[#0d0d0d] px-4 py-[11px] font-mono text-[13px] text-white placeholder:text-[#e6e6e6] focus:border-[#ebffa8] focus:outline-none ${
             isSelected ? 'text-white' : 'text-[#e8e8e8]'
           }`}
           onChange={(e) => {

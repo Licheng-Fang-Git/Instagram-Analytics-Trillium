@@ -130,13 +130,6 @@ export default function Sidebar() {
           pathname={pathname}
         />
       </nav>
-
-      {/* Log out (pinned to bottom) */}
-      <div className="mt-auto border-t border-[#151515] px-2 pt-3">
-        <a href="https://www.trlm.com/" className={navBtn(false)}>
-          <span className="flex-1 text-left">Log out</span>
-        </a>
-      </div>
     </aside>
   );
 }

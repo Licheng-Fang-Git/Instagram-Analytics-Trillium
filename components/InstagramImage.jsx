@@ -54,7 +54,7 @@ export default function InstagramImage({ src, url }) {
           loadedRef.current = true;
         }}
         onError={() => setFailed(true)}
-        className="mx-auto block h-auto w-auto max-h-[640px] max-w-full transition-transform duration-300 group-hover:scale-[1.02]"
+        className="mx-auto block h-auto w-auto max-h-[540px] max-w-full transition-transform duration-300 group-hover:scale-[1.02]"
       />
     </a>
   );

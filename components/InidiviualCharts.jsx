@@ -116,6 +116,8 @@ export default function InidiviualCharts({ data }) {
             data: bucket === 'none' ? raw_cumulative : cumulative,
             smooth: true,
             showSymbol: true,
+            symbol: 'circle',
+            symbolSize: 6,
             itemStyle: { color: "#00d1ae" },
             lineStyle: { width: 2, color: "#00d1ae" },
           },

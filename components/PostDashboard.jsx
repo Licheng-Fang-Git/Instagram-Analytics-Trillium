@@ -55,7 +55,7 @@ export default async function PostDashboard({ title, slug, month, metrics, chart
                 href={link || 'https://www.instagram.com/trilliumtrading/'}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="ml-auto border border-white/25 px-4 py-2 font-display text-[11px] font-bold uppercase tracking-[0.12em] text-white transition-all hover:border-[#ebffa8] hover:bg-[#ebffa8] hover:text-[#0d0d0d]"
+                className="ml-auto border border-white/25 px-4 py-2 font-display text-[11px] font-bold uppercase tracking-[0.12em] text-white transition-all hover:border-[#ebffa8]"
               >
                 View post
               </a>
