@@ -109,7 +109,7 @@ function PostSearchBox({ index, query, onQueryChange, onSelect, excludeCodes, is
           type="text"
           value={query}
           placeholder={`Search post ${index + 1}… (e.g. nasdaq2026)`}
-          className={`w-full rounded-full border border-[#2a2a2a] bg-[#0d0d0d] px-4 py-[11px] font-mono text-[13px] text-white placeholder:text-[#67696f] focus:border-[#ebffa8] focus:outline-none ${
+          className={`w-full rounded-full border border-[#2a2a2a] bg-[#0d0d0d] px-4 py-[11px] font-mono text-[13px] text-white placeholder:text-[#e6e6e6] focus:border-[#ebffa8] focus:outline-none ${
             isSelected ? 'text-white' : 'text-[#e8e8e8]'
           }`}
           onChange={(e) => {
@@ -124,7 +124,7 @@ function PostSearchBox({ index, query, onQueryChange, onSelect, excludeCodes, is
             type="button"
             onMouseDown={(e) => e.preventDefault()}
             onClick={onRemove}
-            className="flex-none px-1.5 text-[15px] leading-none text-[#67696f] transition-colors hover:text-[#ebffa8]"
+            className="flex-none px-1.5 text-[15px] leading-none text-[#e6e6e6] transition-colors hover:text-[#ebffa8]"
             aria-label={`Remove post ${index + 1}`}
           >
             ×
@@ -144,7 +144,7 @@ function PostSearchBox({ index, query, onQueryChange, onSelect, excludeCodes, is
               }}
             >
               <span className="font-mono text-white">{opt.code}</span>
-              <span className="text-[#67696f]"> — {opt.label}</span>
+              <span className="text-[#e6e6e6]"> — {opt.label}</span>
             </li>
           ))}
         </ul>
@@ -354,7 +354,7 @@ export default function ComparePost() {
 
       {/* Bucket controls */}
       <div className="flex flex-wrap items-center gap-4 border border-[#1f1f1f] bg-[#121212] px-6 py-4">
-        <span className="font-display text-[10px] font-bold uppercase tracking-[0.14em] text-[#67696f]">
+        <span className="font-display text-[10px] font-bold uppercase tracking-[0.14em] text-[#e6e6e6]">
           Bucket size
         </span>
         <div className="flex flex-wrap gap-2">
@@ -376,7 +376,7 @@ export default function ComparePost() {
             );
           })}
         </div>
-        <span className="text-xs text-[#67696f]">
+        <span className="text-xs text-[#e6e6e6]">
           Rows combine into buckets of this size, up to the data&apos;s own granularity.
         </span>
       </div>
@@ -385,13 +385,13 @@ export default function ComparePost() {
       <div className="border border-[#1f1f1f] bg-[#121212]">
         <div className="flex items-baseline justify-between border-b border-[#1f1f1f] px-6 py-5">
           <h4 className="font-display text-[16px] font-semibold text-white">Cumulative Views</h4>
-          <span className="text-xs text-[#67696f]">Bucket: {bucketLabel}</span>
+          <span className="text-xs text-[#e6e6e6]">Bucket: {bucketLabel}</span>
         </div>
         <div className="px-6 pb-6 pt-5">
           {hasSelection ? (
             <div ref={cumulativeRef} className="h-[440px] w-full" />
           ) : (
-            <p className="py-16 text-center text-sm text-[#67696f]">Search for posts above to compare.</p>
+            <p className="py-16 text-center text-sm text-[#e6e6e6]">Search for posts above to compare.</p>
           )}
         </div>
       </div>
@@ -400,13 +400,13 @@ export default function ComparePost() {
       <div className="border border-[#1f1f1f] bg-[#121212]">
         <div className="flex items-baseline justify-between border-b border-[#1f1f1f] px-6 py-5">
           <h4 className="font-display text-[16px] font-semibold text-white">Views per Interval</h4>
-          <span className="text-xs text-[#67696f]">Bucket: {bucketLabel}</span>
+          <span className="text-xs text-[#e6e6e6]">Bucket: {bucketLabel}</span>
         </div>
         <div className="px-6 pb-6 pt-5">
           {hasSelection ? (
             <div ref={intervalRef} className="h-[440px] w-full" />
           ) : (
-            <p className="py-16 text-center text-sm text-[#67696f]">Search for posts above to compare.</p>
+            <p className="py-16 text-center text-sm text-[#e6e6e6]">Search for posts above to compare.</p>
           )}
         </div>
       </div>
@@ -418,7 +418,7 @@ export default function ComparePost() {
             <h4 className="font-display text-[16px] font-semibold text-white">Head to Head</h4>
           </div>
           <div className="grid grid-cols-[1.1fr_1fr_1fr_0.9fr] items-center border-b border-[#1f1f1f] px-6 py-3">
-            <span className="font-display text-[10px] font-bold uppercase tracking-[0.14em] text-[#67696f]">
+            <span className="font-display text-[10px] font-bold uppercase tracking-[0.14em] text-[#e6e6e6]">
               Metric
             </span>
             <span className="flex items-center justify-end gap-1.5 text-right text-[11px] text-[#e8e8e8]">
@@ -429,7 +429,7 @@ export default function ComparePost() {
               <span className="block h-2 w-2 flex-none" style={{ background: h2hSlots[1].color }} />
               {labelFor(h2hSlots[1].slot.selected.code)}
             </span>
-            <span className="text-right font-display text-[10px] font-bold uppercase tracking-[0.14em] text-[#67696f]">
+            <span className="text-right font-display text-[10px] font-bold uppercase tracking-[0.14em] text-[#e6e6e6]">
               Delta
             </span>
           </div>

@@ -22,12 +22,12 @@ export default function TopPostsTable({ posts }) {
     <div className="border border-[#1f1f1f] bg-[#121212]">
       <div className="flex items-center justify-between border-b border-[#1f1f1f] px-6 py-5">
         <h4 className="font-display text-[16px] font-semibold text-white">Top Posts</h4>
-        <span className="font-mono text-xs text-[#67696f]">{rows.length} posts</span>
+        <span className="font-mono text-xs text-[#e6e6e6]">{rows.length} posts</span>
       </div>
 
       {/* Column headers */}
       <div
-        className={`grid ${COLS} border-b border-[#1f1f1f] px-6 py-3 font-display text-[10px] font-bold uppercase tracking-[0.14em] text-[#67696f]`}
+        className={`grid ${COLS} border-b border-[#1f1f1f] px-6 py-3 font-display text-[10px] font-bold uppercase tracking-[0.14em] text-[#e6e6e6]`}
       >
         <span>Post</span>
         <span className="text-right">Views</span>
@@ -47,14 +47,14 @@ export default function TopPostsTable({ posts }) {
           >
             <span className="flex flex-col gap-0.5">
               <span className="text-sm text-white">{p.title}</span>
-              <span className="font-mono text-[11px] text-[#67696f]">{p.slug}</span>
+              <span className="font-mono text-[11px] text-[#e6e6e6]">{p.slug}</span>
             </span>
             <span className="text-right font-mono text-[13px] text-[#e8e8e8]">{fmt(p.views)}</span>
             <span className="text-right font-mono text-[13px] text-[#e8e8e8]">{fmt(p.reach)}</span>
             <span className="text-right font-mono text-[13px] text-[#e8e8e8]">{fmt(p.likes)}</span>
             <span className="text-right font-mono text-[13px] text-[#e8e8e8]">{fmt(p.saves)}</span>
             <span className="flex items-center justify-end gap-2">
-              <span className="font-mono text-xs text-[#787878]">{eng.toFixed(1)}%</span>
+              <span className="font-mono text-xs text-[#e6e6e6]">{eng.toFixed(1)}%</span>
               <span className="block h-1.5 w-[72px] bg-[#1f1f1f]">
                 <span
                   className="block h-full bg-[#ebffa8]"

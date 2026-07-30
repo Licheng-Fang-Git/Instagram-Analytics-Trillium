@@ -168,7 +168,7 @@ function MetricChart({ title, metricKey, rows, postMarks, color, def }) {
   return (
     <div className="flex flex-col gap-1 border border-[#1f1f1f] bg-[#121212] px-6 pb-4 pt-6">
       <div className="flex items-baseline justify-between">
-        <span className="group relative inline-flex cursor-help items-center gap-1 font-display text-[11px] font-bold uppercase tracking-[0.14em] text-[#787878] underline decoration-dotted decoration-[#4a4a4a] underline-offset-4 transition-colors hover:text-[#e8e8e8]">
+        <span className="group relative inline-flex cursor-help items-center gap-1 font-display text-[11px] font-bold uppercase tracking-[0.14em] text-[#e6e6e6] underline decoration-dotted decoration-[#4a4a4a] underline-offset-4 transition-colors hover:text-[#e8e8e8]">
           {title}
           {def && (
             <span

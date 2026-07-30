@@ -29,7 +29,7 @@ export default function InstagramImage({ src, url }) {
         rel="noopener noreferrer"
         className="flex h-[420px] items-center justify-center border border-dashed border-[#2f2f2f] bg-[#0d0d0d] p-6 text-center transition-colors hover:border-[rgba(235,255,168,0.35)]"
       >
-        <span className="max-w-[26ch] text-[13px] text-[#67696f]">
+        <span className="max-w-[26ch] text-[13px] text-[#e6e6e6]">
           Preview unavailable — open the post on Instagram.
         </span>
       </a>

@@ -217,11 +217,11 @@ export default function BestTimeToPost({ series }) {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {callouts.map((c) => (
           <div key={c.label} className={calloutCard} style={{ borderTop: `3px solid ${c.accent}` }}>
-            <span className="font-display text-[10px] font-bold uppercase tracking-[0.14em] text-[#787878]">
+            <span className="font-display text-[10px] font-bold uppercase tracking-[0.14em] text-[#e6e6e6]">
               {c.label}
             </span>
             <span className="font-serif text-[34px] leading-[1.05] text-white">{c.value}</span>
-            <span className="text-[13px] text-[#787878]">{c.note}</span>
+     
           </div>
         ))}
       </div>
@@ -232,7 +232,7 @@ export default function BestTimeToPost({ series }) {
           <h4 className="font-display text-[16px] font-semibold text-white">Views by Day &amp; Hour</h4>
 
           <div className="flex items-center gap-2">
-            <span className="font-display text-[10px] font-bold uppercase tracking-[0.14em] text-[#67696f]">
+            <span className="font-display text-[10px] font-bold uppercase tracking-[0.14em] text-[#e6e6e6]">
               Bucket
             </span>
             <div className="flex flex-wrap gap-2">
@@ -257,7 +257,7 @@ export default function BestTimeToPost({ series }) {
           </div>
 
           <div className="ml-auto flex items-center gap-2">
-            <span className="font-display text-[10px] font-bold uppercase tracking-[0.14em] text-[#67696f]">
+            <span className="font-display text-[10px] font-bold uppercase tracking-[0.14em] text-[#e6e6e6]">
               Post
             </span>
             <select
@@ -277,13 +277,13 @@ export default function BestTimeToPost({ series }) {
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="font-mono text-[11px] text-[#787878]">low</span>
+            <span className="font-mono text-[11px] text-[#e6e6e6]">low</span>
             <span className="flex">
               {legendSteps.map((o, i) => (
                 <span key={i} className="block h-2.5 w-[22px]" style={{ background: BRAND.accent, opacity: o }} />
               ))}
             </span>
-            <span className="font-mono text-[11px] text-[#787878]">high</span>
+            <span className="font-mono text-[11px] text-[#e6e6e6]">high</span>
           </div>
         </div>
         <div className="overflow-x-auto px-6 pb-6 pt-5">
@@ -304,7 +304,7 @@ export default function BestTimeToPost({ series }) {
               key={`${c.di}-${c.col}`}
               className="grid grid-cols-[24px_minmax(0,1fr)_74px_minmax(0,80px)] items-center gap-3 border-b border-[#161616] px-6 py-3.5"
             >
-              <span className="font-mono text-xs text-[#67696f]">{String(i + 1).padStart(2, '0')}</span>
+              <span className="font-mono text-xs text-[#e6e6e6]">{String(i + 1).padStart(2, '0')}</span>
               <span className="whitespace-nowrap text-sm text-white">{windowLabel(c.di, c.col, bucketMin)}</span>
               <span className="text-right font-mono text-[13px] text-white">{compact(c.v)}</span>
               <span className="block h-1.5 bg-[#1f1f1f]">
@@ -316,7 +316,7 @@ export default function BestTimeToPost({ series }) {
             </div>
           ))}
           {sorted.length === 0 && (
-            <p className="px-6 py-10 text-center text-sm text-[#67696f]">No data for this selection.</p>
+            <p className="px-6 py-10 text-center text-sm text-[#e6e6e6]">No data for this selection.</p>
           )}
         </div>
 

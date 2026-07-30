@@ -130,7 +130,7 @@ export default function InidiviualCharts({ data }) {
       <div className="flex items-center justify-between border-b border-[#1f1f1f] px-6 py-5">
         <h4 className="font-display text-[16px] font-semibold text-white">View Growth</h4>
         <label className="flex items-center gap-2.5">
-          <span className="font-display text-[10px] font-bold uppercase tracking-[0.14em] text-[#67696f]">
+          <span className="font-display text-[10px] font-bold uppercase tracking-[0.14em] text-[#e6e6e6]">
             Bucket size
           </span>
           <select

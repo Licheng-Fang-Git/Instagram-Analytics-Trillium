@@ -32,7 +32,7 @@ export default function MetricCards({ data }) {
           className="flex flex-col gap-1.5 border border-[#232323] bg-black px-5 pb-5 pt-[18px] transition-colors hover:border-[rgba(235,255,168,0.35)]"
         >
           
-          <span className={`font-display text-[10px] font-bold uppercase tracking-[0.14em] text-[#787878]`}>
+          <span className={`font-display text-[10px] font-bold uppercase tracking-[0.14em] text-[#e6e6e6]`}>
             {item.label}
           </span> 
           <span className={`font-serif text-[34px] leading-none ${item.label === "Likes" ? "text-[#ebffa8]" : "text-white"}`}>{item.value}</span>

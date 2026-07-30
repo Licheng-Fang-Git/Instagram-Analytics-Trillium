@@ -67,7 +67,7 @@ export default async function DashboardPage() {
           <h1 className="m-0 font-serif text-[52px] leading-[1.05] tracking-[-0.01em] text-white">
             Dashboard
           </h1>
-          <p className="m-0 max-w-[60ch] text-[15px] text-[#787878]">
+          <p className="m-0 max-w-[60ch] text-[15px] text-[#e6e6e6]">
             {`Metrics pulled up to ${chartData[chartData.length-1]['Date']} `}
           </p>
         </header>

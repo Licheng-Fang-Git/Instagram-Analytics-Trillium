@@ -32,7 +32,7 @@ export default async function PostDashboard({ title, slug, month, metrics, chart
           <h1 className="m-0 font-serif text-[46px] leading-[1.08] tracking-[-0.01em] text-white">
             {title}
           </h1>
-          <p className="m-0 text-[15px] text-[#787878]">{`Publication ${month} ${date}, 2026. Post metrics up to ${upToMonth} ${upToDate}, 2026`}</p>
+          <p className="m-0 text-[15px] text-[#e6e6e6]">{`Publication ${month} ${date}, 2026. Post metrics up to ${upToMonth} ${upToDate}, 2026`}</p>
         </header>
 
         <MetricCards data={metrics} />
@@ -49,7 +49,7 @@ export default async function PostDashboard({ title, slug, month, metrics, chart
               </div></a>
               <div className="flex flex-col">
                 <a href="https://www.instagram.com/trilliumtrading/"> <span className="text-sm text-white">trilliumtrading</span> </a>
-                <span className="text-xs text-[#67696f]">@trilliumtrading</span>
+                <span className="text-xs text-[#e6e6e6]">@trilliumtrading</span>
               </div>
               <a
                 href={link || 'https://www.instagram.com/trilliumtrading/'}

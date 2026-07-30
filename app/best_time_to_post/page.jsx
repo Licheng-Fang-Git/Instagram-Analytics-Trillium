@@ -15,7 +15,7 @@ export default async function BestTimeToPostPage() {
           <h1 className="m-0 font-serif text-[52px] leading-[1.05] tracking-[-0.01em] text-white">
             Best Time to Post
           </h1>
-          <p className="m-0 max-w-[62ch] text-[15px] text-[#787878]">
+          <p className="m-0 max-w-[62ch] text-[15px] text-[#e6e6e6]">
             Views recorded across your posts, folded onto a day × hour grid by the clock time each
             view was counted. See all posts aggregated, or pick a single post.
           </p>
