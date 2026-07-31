@@ -27,7 +27,7 @@ export default function InstagramImage({ src, url }) {
         href={url || 'https://www.instagram.com/trilliumtrading/'}
         target="_blank"
         rel="noopener noreferrer"
-        className="flex h-[420px] items-center justify-center border border-dashed border-[#2f2f2f] bg-[#0d0d0d] p-6 text-center transition-colors hover:border-[rgba(235,255,168,0.35)]"
+        className="flex h-105 items-center justify-center border border-dashed border-[#2f2f2f] bg-[#0d0d0d] p-6 text-center transition-colors hover:border-[rgba(235,255,168,0.35)]"
       >
         <span className="max-w-[26ch] text-[13px] text-[#e6e6e6]">
           Preview unavailable — open the post on Instagram.
@@ -41,7 +41,7 @@ export default function InstagramImage({ src, url }) {
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="group mx-auto block w-fit max-w-full overflow-hidden border border-[#2a2a2a] bg-black"
+      className="group mx-auto block w-fit max-w-120 overflow-hidden border border-[#2a2a2a] bg-black"
       title="Open on Instagram"
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}

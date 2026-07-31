@@ -243,7 +243,7 @@ export default function ComparePost() {
           name: slot.selected.label,
           type: 'line',
           smooth: true,
-          showSymbol: false,
+          showSymbol: bucket == 'none' ? false : true,
           data: points,
           lineStyle: { width: 2.25, color },
           itemStyle: { color },

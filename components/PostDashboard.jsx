@@ -40,11 +40,9 @@ export default async function PostDashboard({ title, slug, month, metrics, chart
         <InidiviualCharts data={chartData} />
 
         <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[1.1fr_1fr]">
-
           <div className="flex flex-col gap-4 border border-[#1f1f1f] bg-[#121212] p-6">
-            <h4 className="font-display text-[16px] font-semibold text-white">The Post</h4>
             <div className="flex items-center gap-3">
-              <a href="https://www.instagram.com/trilliumtrading/"><div className="flex h-10 w-10 items-center justify-center rounded-full border border-[#2a2a2a] bg-black font-serif text-lg text-[#ebffa8]">
+              <a href="https://www.instagram.com/trilliumtrading/"><div className="flex h-10 w-10 ml-10 items-center justify-center rounded-full border border-[#2a2a2a] bg-black font-serif text-lg text-[#ebffa8]">
                 T
               </div></a>
               <div className="flex flex-col">
@@ -55,7 +53,7 @@ export default async function PostDashboard({ title, slug, month, metrics, chart
                 href={link || 'https://www.instagram.com/trilliumtrading/'}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="ml-auto border border-white/25 px-4 py-2 font-display text-[11px] font-bold uppercase tracking-[0.12em] text-white transition-all hover:border-[#ebffa8]"
+                className="ml-auto mr-10 border border-white/25 px-4 py-2 font-display text-[11px] font-bold uppercase tracking-[0.12em] text-white transition-all hover:border-[#ebffa8]"
               >
                 View post
               </a>
