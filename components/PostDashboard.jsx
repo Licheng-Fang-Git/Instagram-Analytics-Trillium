@@ -49,14 +49,6 @@ export default async function PostDashboard({ title, slug, month, metrics, chart
                 <a href="https://www.instagram.com/trilliumtrading/"> <span className="text-sm text-white">trilliumtrading</span> </a>
                 <span className="text-xs text-[#e6e6e6]">@trilliumtrading</span>
               </div>
-              <a
-                href={link || 'https://www.instagram.com/trilliumtrading/'}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="ml-auto mr-10 border border-white/25 px-4 py-2 font-display text-[11px] font-bold uppercase tracking-[0.12em] text-white transition-all hover:border-[#ebffa8]"
-              >
-                View post
-              </a>
             </div>
             <InstagramImage src={imageSrc} url={link} />
           </div>

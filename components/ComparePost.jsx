@@ -42,6 +42,10 @@ function engRate(m) {
 // Minutes per bucket, for the elapsed-time ("aligned") x-axis labels.
 const BUCKET_MIN = { '0:15': 15, '0:30': 30, '1:00': 60, '6:00': 360, '24:00:00': 1440 };
 
+// Buckets fine enough that aligning both posts from their own post time reads
+// well; 24h / None stay on the shared absolute-time axis.
+const ALIGN_BUCKETS = ['0:15', '0:30', '1:00', '6:00'];
+
 // A compact elapsed-time label ("15m", "1h 30m", "1d 6h") for a minute count.
 function elapsedLabel(min) {
   if (min < 60) return `${min}m`;
@@ -243,8 +247,22 @@ export default function ComparePost() {
     .filter(({ slot }) => slot.selected && slot.series);
 
   // Draw the cumulative + per-interval line charts whenever selection or bucket
-  // changes. Each selected post is one series in its slot color.
+  // changes. For the fine buckets (15m/30m/1h/6h) the lines are ALIGNED from
+  // each post's own post time (elapsed x-axis, both starting at step 0); for
+  // 24h / None they stay on the shared absolute-time axis.
   useEffect(() => {
+    const aligned = ALIGN_BUCKETS.includes(bucket);
+    const bmin = BUCKET_MIN[bucket] || null;
+
+    const perSlot = activeSlots.map(({ slot, color }) => {
+      const f = seriesForBucket(slot.series.rows, bucket);
+      return { name: slot.selected.label, color, slot, cumulative: f.cumulative, interval: f.interval };
+    });
+    const maxLen = Math.max(0, ...perSlot.map((p) => p.interval.length));
+    const categories = aligned
+      ? Array.from({ length: maxLen }, (_, i) => (bmin ? '+' + elapsedLabel((i + 1) * bmin) : 'Step ' + (i + 1)))
+      : null;
+
     const specs = [
       { ref: cumulativeRef, inst: cumulativeInst, key: 'cumulative' },
       { ref: intervalRef, inst: intervalInst, key: 'interval' },
@@ -256,20 +274,54 @@ export default function ComparePost() {
       if (!inst.current) inst.current = echarts.init(ref.current);
       const chart = inst.current;
 
-      const series = activeSlots.map(({ slot, color }) => {
-        const filtered = seriesForBucket(slot.series.rows, bucket);
-        const points = filtered[key];
-        return {
-          name: slot.selected.label,
-          type: 'line',
-          smooth: true,
-          showSymbol: bucket == 'none' ? false : true,
-          data: points,
-          lineStyle: { width: 2.25, color },
-          itemStyle: { color },
-          markPoint: markPoint(color, getCrossPostMarks(slot, allPostDates, points)),
-        };
-      });
+      const series = perSlot.map((p) =>
+        aligned
+          ? {
+              name: p.name,
+              type: 'line',
+              smooth: true,
+              showSymbol: maxLen <= 60,
+              symbol: 'circle',
+              symbolSize: 5,
+              connectNulls: true,
+              data: Array.from({ length: maxLen }, (_, i) =>
+                i < p[key].length ? Number(p[key][i][1]) || 0 : null
+              ),
+              lineStyle: { width: 2.25, color: p.color },
+              itemStyle: { color: p.color },
+            }
+          : {
+              name: p.name,
+              type: 'line',
+              smooth: true,
+              showSymbol: bucket !== 'none',
+              data: p[key],
+              lineStyle: { width: 2.25, color: p.color },
+              itemStyle: { color: p.color },
+              markPoint: markPoint(p.color, getCrossPostMarks(p.slot, allPostDates, p[key])),
+            }
+      );
+
+      const xAxis = aligned
+        ? {
+            type: 'category',
+            data: categories,
+            name: bmin ? 'Time since post' : 'Step',
+            nameLocation: 'middle',
+            nameGap: 34,
+            nameTextStyle: { color: BRAND.subtle, fontFamily: BRAND.sans, fontSize: 12 },
+            axisLine,
+            axisTick: { show: false },
+            splitLine: { show: false },
+            axisLabel: { ...axisLabel, rotate: categories.length > 12 ? 38 : 0, hideOverlap: true },
+          }
+        : {
+            type: 'time',
+            axisLine,
+            axisTick: { show: false },
+            splitLine: { show: false },
+            axisLabel: { ...axisLabel, formatter: formatAxisDateTimeShort, rotate: 38, hideOverlap: true },
+          };
 
       chart.setOption(
         {
@@ -281,14 +333,8 @@ export default function ComparePost() {
             textStyle: { color: BRAND.legend, fontFamily: BRAND.sans, fontSize: 12 },
             inactiveColor: '#4a4a4a',
           },
-          grid: { top: 16, left: 8, right: 16, bottom: 40, containLabel: true },
-          xAxis: {
-            type: 'time',
-            axisLine,
-            axisTick: { show: false },
-            splitLine: { show: false },
-            axisLabel: { ...axisLabel, formatter: formatAxisDateTimeShort, rotate: 38, hideOverlap: true },
-          },
+          grid: { top: 16, left: 8, right: aligned ? 8 : 16, bottom: aligned ? 52 : 40, containLabel: true },
+          xAxis,
           yAxis: valueAxis(),
           series,
         },
@@ -522,6 +568,8 @@ export default function ComparePost() {
   }, []);
 
   const bucketLabel = BUCKET_OPTIONS.find((o) => o.value === bucket)?.label || bucket;
+  const alignedMode = ALIGN_BUCKETS.includes(bucket);
+  const lineAxisNote = alignedMode ? `Aligned from post time · ${bucketLabel}` : `Absolute time · ${bucketLabel}`;
 
   // Per-post summary for the selected bucket: the number each post "got to",
   // how many buckets it took, and its biggest single-bucket surge — so a bucket
@@ -644,7 +692,7 @@ export default function ComparePost() {
       <div className="border border-[#1f1f1f] bg-[#121212]">
         <div className="flex items-baseline justify-between border-b border-[#1f1f1f] px-6 py-5">
           <h4 className="font-display text-[16px] font-semibold text-white">Cumulative Views</h4>
-          <span className="text-xs text-[#e6e6e6]">Bucket: {bucketLabel}</span>
+          <span className="text-xs text-[#e6e6e6]">{lineAxisNote}</span>
         </div>
         <div className="px-6 pb-6 pt-5">
           {hasSelection ? (
@@ -659,7 +707,7 @@ export default function ComparePost() {
       <div className="border border-[#1f1f1f] bg-[#121212]">
         <div className="flex items-baseline justify-between border-b border-[#1f1f1f] px-6 py-5">
           <h4 className="font-display text-[16px] font-semibold text-white">Views per Interval</h4>
-          <span className="text-xs text-[#e6e6e6]">Bucket: {bucketLabel}</span>
+          <span className="text-xs text-[#e6e6e6]">{lineAxisNote}</span>
         </div>
         <div className="px-6 pb-6 pt-5">
           {hasSelection ? (

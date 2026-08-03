@@ -24,7 +24,7 @@ const METRICS = [
     key: 'Views',
     title: 'Views',
     color: BRAND.accent,
-    def: 'Total number of times your content has been played or displayed on Instagram.',
+    def: 'Total times your content was played or displayed, including repeat views from the same account.',
   },
   {
     key: 'Reach',
@@ -36,13 +36,13 @@ const METRICS = [
     key: 'Content interactions',
     title: 'Content Interactions',
     color: BRAND.white,
-    def: 'Total number of likes, saves, comments, and shares across your content.',
+    def: 'Likes, saves, comments and shares combined across all posts in the selected range.',
   },
   {
     key: 'Visits',
     title: 'Visits',
     color: BRAND.white,
-    def: 'The number of times your profile was visited.',
+    def: 'Times the @trilliumtrading profile was opened — the step before a follow or a careers-page click.',
   },
   {
     key: 'Follows',
@@ -168,15 +168,24 @@ function MetricChart({ title, metricKey, rows, postMarks, color, def }) {
   return (
     <div className="flex flex-col gap-1 border border-[#1f1f1f] bg-[#121212] px-6 pb-4 pt-6">
       <div className="flex items-baseline justify-between">
-        <span className="group relative inline-flex cursor-help items-center gap-1 font-display text-[11px] font-bold uppercase tracking-[0.14em] text-[#e6e6e6] underline decoration-dotted decoration-[#4a4a4a] underline-offset-4 transition-colors hover:text-[#e8e8e8]">
-          {title}
+        <span className="group relative inline-flex cursor-help items-center gap-[7px] font-display text-[11px] font-bold uppercase tracking-[0.14em] text-[#b4b4b4] transition-colors hover:text-[#ebffa8]">
+          <span>{title}</span>
           {def && (
-            <span
-              role="tooltip"
-              className="pointer-events-none absolute left-0 top-full z-20 mt-2 w-64 border border-[#2a2a2a] bg-black px-3 py-2 font-sans text-[11px] font-normal normal-case leading-snug tracking-normal text-[#cfcfcf] opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100"
-            >
-              {def}
-            </span>
+            <>
+              <span className="flex h-[14px] w-[14px] flex-none items-center justify-center rounded-full border border-[#4a4a4a] text-[9px] font-semibold normal-case tracking-normal text-current transition-colors group-hover:border-[#ebffa8]">
+                i
+              </span>
+              <span
+                role="tooltip"
+                className="pointer-events-none absolute left-[-2px] top-[calc(100%+10px)] z-40 w-[252px] border border-[#3a3a3a] bg-black px-[14px] py-3 font-sans text-[12.5px] font-normal normal-case leading-normal tracking-normal text-[#e8e8e8] opacity-0 shadow-[0_4px_4px_rgba(0,0,0,0.25)] transition-opacity duration-150 group-hover:opacity-100"
+              >
+                <span className="absolute left-[14px] top-[-5px] block h-2 w-2 rotate-45 border-l border-t border-[#3a3a3a] bg-black" />
+                <span className="mb-[5px] block font-display text-[10px] font-bold uppercase tracking-[0.14em] text-[#ebffa8]">
+                  {title}
+                </span>
+                {def}
+              </span>
+            </>
           )}
         </span>
       </div>
