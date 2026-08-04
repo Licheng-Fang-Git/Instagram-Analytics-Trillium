@@ -20,6 +20,8 @@ const POST_OPTIONS = [
   { code: 'ditl2026', label: 'Intern Day Reel' },
   { code: 'misconceptions2026', label: 'Misconceptions Reel' },
   { code: 'cht2026', label: 'College Hot Takes' },
+  { code: 'nid2026', label: 'National Intern Day' },
+  { code: 'poker2026', label: 'Poker 2026' },
 ];
 
 function fmt(n) {
@@ -88,9 +90,9 @@ function getCrossPostMarks(slot, allPostDates, ownPoints) {
 function markPoint(color, data) {
   return {
     symbol: 'circle',
-    symbolSize: 6,
+    symbolSize: 8,
     itemStyle: { color: '#0d0d0d', borderColor: color, borderWidth: 1.6 },
-    label: { show: false },
+    label: { show: true },
     emphasis: {
       label: {
         show: true,
@@ -275,6 +277,7 @@ export default function ComparePost() {
       const chart = inst.current;
 
       const series = perSlot.map((p) =>
+        
         aligned
           ? {
               name: p.name,
@@ -294,7 +297,7 @@ export default function ComparePost() {
               name: p.name,
               type: 'line',
               smooth: true,
-              showSymbol: bucket !== 'none',
+              showSymbol: false,
               data: p[key],
               lineStyle: { width: 2.25, color: p.color },
               itemStyle: { color: p.color },
@@ -331,7 +334,7 @@ export default function ComparePost() {
             bottom: 0,
             data: series.map((s) => s.name),
             textStyle: { color: BRAND.legend, fontFamily: BRAND.sans, fontSize: 12 },
-            inactiveColor: '#4a4a4a',
+            inactiveColor: '#4a4a4a',c
           },
           grid: { top: 16, left: 8, right: aligned ? 8 : 16, bottom: aligned ? 52 : 40, containLabel: true },
           xAxis,

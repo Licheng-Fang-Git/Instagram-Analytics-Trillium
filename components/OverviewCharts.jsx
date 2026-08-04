@@ -125,6 +125,7 @@ function MetricChart({ title, metricKey, rows, postMarks, color, def }) {
           axisLine,
           axisTick: { show: false },
           splitLine: { show: false },
+          
         },
         yAxis: valueAxis({ splitNumber: 4 }),
         series: [

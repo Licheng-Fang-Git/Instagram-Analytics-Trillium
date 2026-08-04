@@ -20,6 +20,8 @@ const JULY_POSTS = [
   { href: '/reel_intern_day', label: 'Intern Day Reel', slug: 'dit2026' },
   { href: '/misconceptions_reel', label: 'Misconceptions Reel', slug: 'misconceptions2026' },
   { href: '/college_hot_takes', label: 'College Hot Takes', slug: 'cht2026' },
+  { href: '/national_intern_day', label: 'National Intern Day', slug: 'nid2026' },
+  { href: '/poker2026', label: 'Poker 2026', slug: 'poker2026' },
 ];
 
 // Months newest-first, nested under the 2026 year.

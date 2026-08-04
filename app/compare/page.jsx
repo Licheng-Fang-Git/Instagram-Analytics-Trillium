@@ -1,4 +1,5 @@
 import ComparePost from '@/components/ComparePost';
+import PostImpact from '@/components/PostImpact';
 
 export default function ComparePage() {
   return (
@@ -10,9 +11,11 @@ export default function ComparePage() {
             Compare Posts
           </h1>
           <p className="m-0 max-w-[60ch] text-[15px] text-[#e6e6e6]">
-            Search for posts to compare cumulative view growth and per-interval velocity.
+            Analyze a single post&apos;s impact on account growth, or search to compare posts head to head.
           </p>
         </header>
+
+        <PostImpact />
 
         <ComparePost />
       </div>

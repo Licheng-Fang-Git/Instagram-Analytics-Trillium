@@ -13,6 +13,8 @@ const POST_META = {
   ditl2026: { title: 'Intern Day Reel', slug: 'dit2026', href: '/reel_intern_day' },
   misconceptions2026: { title: 'Misconceptions Reel', slug: 'misconceptions2026', href: '/misconceptions_reel' },
   cht2026: { title: 'College Hot Takes', slug: 'cht2026', href: '/college_hot_takes' },
+  nid2026: { title: 'National Intern Day', slug: 'nid2026', href: '/national_intern_day' },
+  poker2026: { title: 'Poker 2026', slug: 'poker2026', href: '/poker2026' },
 };
 
 async function getGoogleSheetAsCSV(sheetId, sheetName = 'Meet The Interns') {

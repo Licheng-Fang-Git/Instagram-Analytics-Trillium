@@ -12,6 +12,8 @@ const POST_FILES = {
     nasdaq2026: 'Nasdaq',
     misconceptions2026: 'Misconceptions-Reel',
     cht2026: 'College-hot-takes',
+    nid2026: 'National-Intern-Day',
+    poker2026: 'Poker-2026',
 };
 
 async function getGoogleSheetAsCSV(sheetId, sheetName = 'Meet The Interns') {
@@ -31,6 +33,71 @@ async function getGoogleSheetAsCSV(sheetId, sheetName = 'Meet The Interns') {
     } catch (error) {
         console.error("Failed to fetch sheet data:", error);
     }
+}
+
+// The account's daily Overview series (Date + per-day Views/Follows/Reach),
+// for the "Analyze Post" impact chart. Sorted chronologically.
+export async function getOverviewSeries() {
+    const SPREADSHEET_ID = '18wYFbvgo3NtOUvJt-wHQct7Pz18KoRYNaCyAm8t45R4';
+    const csv = await getGoogleSheetAsCSV(SPREADSHEET_ID, 'Overview');
+    const data = csv ? Papa.parse(csv, { header: true, dynamicTyping: true, skipEmptyLines: true }).data : [];
+    const num = (v) => Number(v) || 0;
+    return data
+        .filter((r) => r && r['Date'])
+        .map((r) => ({
+            t: new Date(`${r['Date']}T00:00:00`).getTime(),
+            views: num(r['Views']),
+            follows: num(r['Follows']),
+            reach: num(r['Reach']),
+        }))
+        .filter((r) => Number.isFinite(r.t))
+        .sort((a, b) => a.t - b.t);
+}
+
+// Per-post data for the "Analyze Post" impact chart: publish time, end time,
+// Instagram link, and aggregate metrics — keyed by code.
+export async function getAllPostImpact() {
+    const SPREADSHEET_ID = '18wYFbvgo3NtOUvJt-wHQct7Pz18KoRYNaCyAm8t45R4';
+    const parse = (csv) =>
+        csv ? Papa.parse(csv, { header: true, dynamicTyping: true, skipEmptyLines: true }).data : [];
+    const num = (v) => Number(v) || 0;
+    // Some sheets already include the year in the timestamp; only append 2026 if not.
+    const parseD = (s) => {
+        const str = String(s ?? '');
+        return new Date(/\d{4}/.test(str) ? str : `${str} 2026`).getTime();
+    };
+
+    const content = parse(await getGoogleSheetAsCSV(SPREADSHEET_ID, 'Content'));
+
+    const entries = await Promise.all(
+        Object.entries(POST_FILES).map(async ([code, sheetName]) => {
+            const data = parse(await getGoogleSheetAsCSV(SPREADSHEET_ID, sheetName));
+            const link = data[0]?.Link?.trim() || null;
+            const postedAt = parseD(data[0]?.['Interval Start']);
+            const last = data[data.length - 1] || {};
+            const endAt = parseD(last['Interval End'] ?? last['Interval Start']);
+            const row = link ? content.find((r) => r['Permalink'] === link) : null;
+            return [
+                code,
+                {
+                    link,
+                    postedAt,
+                    endAt,
+                    metrics: {
+                        views: num(row?.['Views']),
+                        reach: num(row?.['Reach']),
+                        likes: num(row?.['Likes']),
+                        shares: num(row?.['Shares']),
+                        follows: num(row?.['Follows']),
+                        comments: num(row?.['Comments']),
+                        saves: num(row?.['Saves']),
+                    },
+                },
+            ];
+        })
+    );
+
+    return Object.fromEntries(entries);
 }
 
 export async function getPostSeries(postCode) {
@@ -154,6 +221,73 @@ export async function getInstagramImage(link) {
         if (og) return og[1].replace(/&amp;/g, '&');
     }
     return null;
+}
+
+function decodeHtml(s) {
+    return String(s)
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+        .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(parseInt(d, 10)));
+}
+
+// Resolve a post's image AND caption in one embed fetch (the /embed/captioned/
+// page carries both). Returns { image, caption }, either null on failure.
+export async function getInstagramMeta(link) {
+    const m = String(link || '').match(/instagram\.com\/(?:p|reel|tv)\/([^/?#]+)/i);
+    if (!m) return { image: null, caption: null };
+    const code = m[1];
+
+    const fetchText = async (url) => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 8000);
+        try {
+            const res = await fetch(url, {
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+                signal: controller.signal,
+                cache: 'no-store',
+            });
+            return res.ok ? await res.text() : null;
+        } catch {
+            return null;
+        } finally {
+            clearTimeout(timer);
+        }
+    };
+
+    const result = { image: null, caption: null };
+    const embed = await fetchText(`https://www.instagram.com/p/${code}/embed/captioned/`);
+    if (embed) {
+        const tag = embed.match(/<img[^>]*EmbeddedMediaImage[^>]*>/i);
+        const src = tag && tag[0].match(/src="([^"]+)"/i);
+        if (src) result.image = src[1].replace(/&amp;/g, '&');
+
+        const cap = embed.match(/<div class="Caption"[^>]*>([\s\S]*?)<\/div>/i);
+        if (cap) {
+            const text = decodeHtml(
+                cap[1]
+                    .replace(/<a[^>]*CaptionUsername[^>]*>[\s\S]*?<\/a>/i, '')
+                    .replace(/<[^>]+>/g, ' ')
+            )
+                .replace(/\s+/g, ' ')
+                .replace(/\s*View all( \d+)? comments?\s*$/i, '')
+                .trim();
+            if (text) result.caption = text;
+        }
+    }
+
+    if (!result.image) {
+        const page = await fetchText(`https://www.instagram.com/p/${code}/`);
+        if (page) {
+            const og = page.match(/<meta property="og:image" content="([^"]+)"/i);
+            if (og) result.image = og[1].replace(/&amp;/g, '&');
+        }
+    }
+
+    return result;
 }
 
 // Per-post normalized rows for the "Best Time to Post" heatmap. Each entry is
