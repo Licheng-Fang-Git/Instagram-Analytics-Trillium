@@ -39,7 +39,7 @@ export default async function PostDashboard({ title, slug, month, metrics, chart
 
         <InidiviualCharts data={chartData} />
 
-        <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[1.1fr_1fr]">
+        <div className="grid grid-cols-2 items-start gap-5">
           <div className="flex flex-col gap-4 border border-[#1f1f1f] bg-[#121212] p-6">
             <div className="flex items-center gap-3">
               <a href="https://www.instagram.com/trilliumtrading/"><div className="flex h-10 w-10 ml-10 items-center justify-center rounded-full border border-[#2a2a2a] bg-black font-serif text-lg text-[#ebffa8]">

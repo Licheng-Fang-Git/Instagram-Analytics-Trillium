@@ -40,7 +40,7 @@ export default function Funnel({ data }) {
               <span>{s.label}</span>
               <span className="font-mono text-[#e6e6e6]">{fmt(s.value)}</span>
             </div>
-            <div className="h-3 bg-[#1f1f1f]">
+            <div className="h-5 bg-[#1f1f1f]">
               <div
                 className="h-full bg-[#ebffa8] transition-[width] duration-500"
                 style={{ width: `${s.w.toFixed(1)}%` }}
