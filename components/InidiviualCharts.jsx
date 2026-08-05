@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import * as echarts from 'echarts';
-import { normalizeRows, bucketByIntervalLength, formatAxisDateTime, formatAxisDateTimeShort, BUCKET_OPTIONS } from '@/lib/chartAggregation';
+import { normalizeRows, bucketByIntervalLength, formatAxisDateTime, formatAxisDateTimeShort, parseTs, BUCKET_OPTIONS } from '@/lib/chartAggregation';
 import { BRAND, brandTooltip, valueAxis, axisLabel, axisLine } from '@/lib/chartTheme';
 
 // Shorten a full "Thu Jun 25 12:04 PM" category label to "Jun 25 12p" for the
@@ -52,9 +52,7 @@ export default function InidiviualCharts({ data }) {
       data.forEach((one_row) => {
         raw_cumulative.push(one_row['Cumulative Views']);
         raw_interval.push(one_row['Views in Interval']);
-        const rawDateStr = one_row['Interval Start'];
-        const timestamp = new Date(`${rawDateStr} ${ASSUMED_YEAR}`).getTime();
-        timeEnds.push(formatAxisDateTime(timestamp));
+        timeEnds.push(formatAxisDateTime(parseTs(one_row['Interval Start'])));
       });
     } else {
       const rows = normalizeRows(data);

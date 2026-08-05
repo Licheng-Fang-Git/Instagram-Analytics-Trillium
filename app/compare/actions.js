@@ -1,7 +1,7 @@
 'use server';
 
 import Papa from 'papaparse';
-import { normalizeRows } from '@/lib/chartAggregation';
+import { normalizeRows, parseTs } from '@/lib/chartAggregation';
 import { getPostMetrics } from '@/app/content.js';
 
 const POST_FILES = {
@@ -141,7 +141,20 @@ export async function getPostSummary(postCode) {
     const link = data[0]?.Link?.trim() || null;
     const metrics = await getPostMetrics({ post_link: link });
 
-    return { rows: normalizeRows(data), link, metrics };
+    // Ad boost dates from the "Ad" column (a date when the post was boosted).
+    // Not every sheet/row has one; collect the distinct, parseable ones.
+    const adDates = [
+        ...new Set(
+            data
+                .map((r) => r['Ad'])
+                .filter((v) => v != null && String(v).trim() !== '')
+                .map((v) => String(v).trim())
+        ),
+    ]
+        .map((v) => parseTs(v))
+        .filter((t) => Number.isFinite(t));
+
+    return { rows: normalizeRows(data), link, metrics, adDates };
 }
 
 // Aggregate metrics for every post, for the overview "Top Posts" table.

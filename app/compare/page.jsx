@@ -1,5 +1,5 @@
 import ComparePost from '@/components/ComparePost';
-import PostImpact from '@/components/PostImpact';
+
 
 export default function ComparePage() {
   return (
@@ -14,8 +14,6 @@ export default function ComparePage() {
             Analyze a single post&apos;s impact on account growth, or search to compare posts head to head.
           </p>
         </header>
-
-        <PostImpact />
 
         <ComparePost />
       </div>

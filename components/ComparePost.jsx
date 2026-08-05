@@ -45,8 +45,14 @@ function engRate(m) {
 const BUCKET_MIN = { '0:15': 15, '0:30': 30, '1:00': 60, '6:00': 360, '24:00:00': 1440 };
 
 // Buckets fine enough that aligning both posts from their own post time reads
-// well; 24h / None stay on the shared absolute-time axis.
+// well; 24h / None stay on the shared absolute-time axis (day-by-day ticks).
 const ALIGN_BUCKETS = ['0:15', '0:30', '1:00', '6:00'];
+const DAY_MS = 86400000;
+
+// A day-only axis label ("Jun 25") for the absolute-time charts.
+function dayLabel(ts) {
+  return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
 
 // A compact elapsed-time label ("15m", "1h 30m", "1d 6h") for a minute count.
 function elapsedLabel(min) {
@@ -72,8 +78,8 @@ function seriesForBucket(rows, bucket) {
 }
 
 // For a given post's line, every OTHER post that went up within its visible
-// window becomes a "X was posted here" marker sitting on this line.
-function getCrossPostMarks(slot, allPostDates, ownPoints) {
+// window becomes a filled "X was posted here" marker sitting on this line.
+function getCrossPostMarks(slot, allPostDates, ownPoints, color) {
   if (!allPostDates || !ownPoints.length) return [];
   const ownStart = ownPoints[0][0];
   const ownEnd = ownPoints[ownPoints.length - 1][0];
@@ -84,15 +90,30 @@ function getCrossPostMarks(slot, allPostDates, ownPoints) {
       name: opt.label,
       link: meta.link,
       coord: [meta.postedAt, interpolateValue(ownPoints, meta.postedAt)],
+      itemStyle: { color, borderColor: '#0d0d0d', borderWidth: 1 },
     }));
 }
 
-function markPoint(color, data) {
+// Orange markers at this post's own ad-boost dates (from the "Ad" column).
+function getAdMarks(adDates, ownPoints) {
+  if (!adDates?.length || !ownPoints.length) return [];
+  const start = ownPoints[0][0];
+  const end = ownPoints[ownPoints.length - 1][0];
+  return adDates
+    .filter((t) => Number.isFinite(t) && t >= start && t <= end)
+    .map((t) => ({
+      name: 'Boosted (ad)',
+      coord: [t, interpolateValue(ownPoints, t)],
+      symbolSize: 11,
+      itemStyle: { color: '#ff6549', borderColor: '#0d0d0d', borderWidth: 1 },
+    }));
+}
+
+function markPoint(data) {
   return {
     symbol: 'circle',
-    symbolSize: 8,
-    itemStyle: { color: '#0d0d0d', borderColor: color, borderWidth: 1.6 },
-    label: { show: true },
+    symbolSize: 9,
+    label: { show: false },
     emphasis: {
       label: {
         show: true,
@@ -115,12 +136,14 @@ function markPoint(color, data) {
 function PostSearchBox({ index, query, onQueryChange, onSelect, excludeCodes, isSelected, onRemove, canRemove, color }) {
   const [open, setOpen] = useState(false);
 
-  const matches = POST_OPTIONS.filter(
-    (opt) =>
-      !excludeCodes.includes(opt.code) &&
-      (opt.code.toLowerCase().includes(query.trim().toLowerCase()) ||
-        opt.label.toLowerCase().includes(query.trim().toLowerCase()))
-  );
+  // Token-based match against code + label, so multi-word queries in any order
+  // work — e.g. "interns 2026" matches "Meet the 2026 Interns" / interns2026.
+  const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const matches = POST_OPTIONS.filter((opt) => {
+    if (excludeCodes.includes(opt.code)) return false;
+    const hay = `${opt.code} ${opt.label}`.toLowerCase();
+    return tokens.every((t) => hay.includes(t));
+  });
 
   return (
     <div className="relative w-full min-w-[220px] flex-1">
@@ -181,20 +204,12 @@ export default function ComparePost() {
   const cumulativeInst = useRef(null);
   const intervalRef = useRef(null);
   const intervalInst = useRef(null);
-  const growthRef = useRef(null);
-  const growthInst = useRef(null);
-  const alignedRef = useRef(null);
-  const alignedInst = useRef(null);
   const nextSlotId = useRef(2);
 
-  const [slots, setSlots] = useState([
-    { id: 0, ...EMPTY_SLOT },
-    { id: 1, ...EMPTY_SLOT },
-  ]);
+  const [slots, setSlots] = useState([{ id: 0, ...EMPTY_SLOT }]);
   const [error, setError] = useState(null);
   const [allPostDates, setAllPostDates] = useState(null);
   const [bucket, setBucket] = useState('none');
-  const [detail, setDetail] = useState(null);
 
   useEffect(() => {
     getAllPostDates().then(setAllPostDates).catch(() => setAllPostDates({}));
@@ -301,7 +316,10 @@ export default function ComparePost() {
               data: p[key],
               lineStyle: { width: 2.25, color: p.color },
               itemStyle: { color: p.color },
-              markPoint: markPoint(p.color, getCrossPostMarks(p.slot, allPostDates, p[key])),
+              markPoint: markPoint([
+                ...getCrossPostMarks(p.slot, allPostDates, p[key], p.color),
+                ...getAdMarks(p.slot.series.adDates, p[key]),
+              ]),
             }
       );
 
@@ -320,10 +338,12 @@ export default function ComparePost() {
           }
         : {
             type: 'time',
+            minInterval: DAY_MS,
+            maxInterval: DAY_MS,
             axisLine,
             axisTick: { show: false },
             splitLine: { show: false },
-            axisLabel: { ...axisLabel, formatter: formatAxisDateTimeShort, rotate: 38, hideOverlap: true },
+            axisLabel: { ...axisLabel, formatter: dayLabel, rotate: 38, hideOverlap: true },
           };
 
       chart.setOption(
@@ -334,7 +354,7 @@ export default function ComparePost() {
             bottom: 0,
             data: series.map((s) => s.name),
             textStyle: { color: BRAND.legend, fontFamily: BRAND.sans, fontSize: 12 },
-            inactiveColor: '#4a4a4a',c
+            inactiveColor: '#4a4a4a',
           },
           grid: { top: 16, left: 8, right: aligned ? 8 : 16, bottom: aligned ? 52 : 40, containLabel: true },
           xAxis,
@@ -361,212 +381,10 @@ export default function ComparePost() {
     return () => cleanups.forEach((fn) => fn());
   }, [slots, allPostDates, bucket]);
 
-  // Growth per interval as bars — how much each post gained in each bucket, so
-  // the pace is readable (grew fast, popped, slowed, sped up) instead of the
-  // monotonic cumulative line that "just goes up".
-  useEffect(() => {
-    if (!growthRef.current) return;
-    if (!growthInst.current) growthInst.current = echarts.init(growthRef.current);
-    const chart = growthInst.current;
-
-    // Only real data points become x categories (sorted union of bucket
-    // end-times across the selected posts) — no blank stretches of empty time,
-    // so bars stay wide while chronological order and real times are kept.
-    const bLabel = BUCKET_OPTIONS.find((o) => o.value === bucket)?.label || bucket;
-    const perSlot = activeSlots.map(({ slot, color }) => {
-      const f = seriesForBucket(slot.series.rows, bucket);
-      return {
-        name: slot.selected.label,
-        color,
-        interval: f.interval,
-        cumulative: f.cumulative,
-        rowByEnd: new Map(slot.series.rows.map((r) => [r.tEnd, r])),
-      };
-    });
-    const times = [...new Set(perSlot.flatMap((p) => p.interval.map(([t]) => t)))].sort((a, b) => a - b);
-    const idxOf = new Map(times.map((t, i) => [t, i]));
-    const categories = times.map((t) => formatAxisDateTimeShort(t));
-    const series = perSlot.map((p) => {
-      const data = new Array(times.length).fill(null);
-      p.interval.forEach(([t, v], i) => {
-        const cum = p.cumulative[i]?.[1];
-        const raw = p.rowByEnd.get(t);
-        // Full row detail for the click-through: exact for the "None" bucket
-        // (one raw row per bar), or the aggregated bucket span otherwise.
-        const detail =
-          bucket === 'none' && raw
-            ? {
-                post: p.name,
-                tStart: raw.tStart,
-                tEnd: t,
-                length: raw.intervalLength,
-                views: Number(v) || 0,
-                cumulative: raw.cumulative ?? cum,
-              }
-            : {
-                post: p.name,
-                tStart: i > 0 ? p.interval[i - 1][0] : raw?.tStart ?? t,
-                tEnd: t,
-                length: bLabel,
-                views: Number(v) || 0,
-                cumulative: cum,
-              };
-        data[idxOf.get(t)] = { value: Number(v) || 0, detail };
-      });
-      return {
-        name: p.name,
-        type: 'bar',
-        data,
-        barMaxWidth: 26,
-        itemStyle: { color: p.color, opacity: 0.85 },
-      };
-    });
-
-    chart.setOption(
-      {
-        backgroundColor: 'transparent',
-        tooltip: { ...brandTooltip, axisPointer: { type: 'shadow' } },
-        legend: {
-          bottom: 0,
-          data: series.map((s) => s.name),
-          textStyle: { color: BRAND.legend, fontFamily: BRAND.sans, fontSize: 12 },
-          inactiveColor: '#4a4a4a',
-        },
-        // Zoom/scroll so bars can be enlarged: drag on the plot or the slider to
-        // narrow the window; fewer visible bars = wider bars.
-        dataZoom: [
-          { type: 'inside', throttle: 50 },
-          {
-            type: 'slider',
-            height: 16,
-            bottom: 34,
-            borderColor: '#2a2a2a',
-            backgroundColor: 'transparent',
-            fillerColor: 'rgba(235,255,168,0.12)',
-            handleStyle: { color: '#ebffa8', borderColor: '#ebffa8' },
-            moveHandleStyle: { color: '#3a3a3a' },
-            dataBackground: { lineStyle: { color: '#3a3a3a' }, areaStyle: { color: '#1f1f1f' } },
-            selectedDataBackground: { lineStyle: { color: '#ebffa8' }, areaStyle: { color: 'rgba(235,255,168,0.15)' } },
-            textStyle: { color: BRAND.muted, fontFamily: BRAND.mono, fontSize: 10 },
-          },
-        ],
-        grid: { top: 16, left: 8, right: 16, bottom: 74, containLabel: true },
-        xAxis: {
-          type: 'category',
-          data: categories,
-          axisLine,
-          axisTick: { show: false },
-          splitLine: { show: false },
-          axisLabel: { ...axisLabel, rotate: 38, hideOverlap: true },
-        },
-        yAxis: valueAxis(),
-        series,
-      },
-      { notMerge: true }
-    );
-
-    const onBarClick = (params) => {
-      if (params.data?.detail) setDetail(params.data.detail);
-    };
-    chart.on('click', onBarClick);
-    const onResize = () => chart.resize();
-    window.addEventListener('resize', onResize);
-    return () => {
-      chart.off('click', onBarClick);
-      window.removeEventListener('resize', onResize);
-    };
-  }, [slots, bucket]);
-
-  // Aligned view: both posts start at the same origin (elapsed time from their
-  // own post time), the x-axis steps by the bucket size, bars = views gained in
-  // each step, lines = cumulative. Lets you compare pace from t=0.
-  useEffect(() => {
-    if (!alignedRef.current) return;
-    if (!alignedInst.current) alignedInst.current = echarts.init(alignedRef.current);
-    const chart = alignedInst.current;
-
-    const bmin = BUCKET_MIN[bucket] || null;
-    const perSlot = activeSlots.map(({ slot, color }) => {
-      const f = seriesForBucket(slot.series.rows, bucket);
-      return {
-        name: slot.selected.label,
-        color,
-        interval: f.interval.map(([, v]) => Number(v) || 0),
-        cumulative: f.cumulative.map(([, v]) => Number(v) || 0),
-      };
-    });
-    const maxLen = Math.max(0, ...perSlot.map((p) => p.interval.length));
-    const categories = Array.from({ length: maxLen }, (_, i) =>
-      bmin ? '+' + elapsedLabel((i + 1) * bmin) : 'Bucket ' + (i + 1)
-    );
-    const pad = (arr) => Array.from({ length: maxLen }, (_, i) => (i < arr.length ? arr[i] : null));
-
-    const series = [];
-    perSlot.forEach((p) => {
-      series.push({
-        name: p.name,
-        type: 'bar',
-        yAxisIndex: 0,
-        data: pad(p.interval),
-        barMaxWidth: 16,
-        itemStyle: { color: p.color, opacity: 0.85 },
-      });
-      series.push({
-        name: `${p.name} · cumulative`,
-        type: 'line',
-        yAxisIndex: 1,
-        data: pad(p.cumulative),
-        smooth: true,
-        symbol: 'circle',
-        symbolSize: 5,
-        itemStyle: { color: p.color },
-        lineStyle: { width: 2, color: p.color },
-      });
-    });
-
-    chart.setOption(
-      {
-        backgroundColor: 'transparent',
-        tooltip: { ...brandTooltip, axisPointer: { type: 'shadow' } },
-        legend: {
-          bottom: 0,
-          data: series.map((s) => s.name),
-          textStyle: { color: BRAND.legend, fontFamily: BRAND.sans, fontSize: 12 },
-          inactiveColor: '#4a4a4a',
-        },
-        grid: { top: 16, left: 8, right: 8, bottom: 52, containLabel: true },
-        xAxis: {
-          type: 'category',
-          data: categories,
-          name: bmin ? 'Time since post' : 'Bucket',
-          nameLocation: 'middle',
-          nameGap: 34,
-          nameTextStyle: { color: BRAND.subtle, fontFamily: BRAND.sans, fontSize: 12 },
-          axisLine,
-          axisTick: { show: false },
-          splitLine: { show: false },
-          axisLabel: { ...axisLabel, rotate: categories.length > 12 ? 38 : 0, hideOverlap: true },
-        },
-        yAxis: [
-          valueAxis({ name: 'Views in step', position: 'left' }),
-          valueAxis({ name: 'Cumulative', position: 'right', splitLine: { show: false } }),
-        ],
-        series,
-      },
-      { notMerge: true }
-    );
-
-    const onResize = () => chart.resize();
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, [slots, bucket]);
-
   useEffect(() => {
     return () => {
       cumulativeInst.current?.dispose();
       intervalInst.current?.dispose();
-      growthInst.current?.dispose();
-      alignedInst.current?.dispose();
     };
   }, []);
 
@@ -616,25 +434,23 @@ export default function ComparePost() {
             color={seriesColor(index)}
             onQueryChange={(v) => handleQueryChange(index, v)}
             onSelect={(opt) => handleSelect(index, opt)}
-            excludeCodes={slots
-              .filter((_, i) => i !== index)
-              .map((s) => s.selected?.code)
-              .filter(Boolean)}
+            excludeCodes={[]}
             isSelected={Boolean(slot.selected)}
-            onRemove={() => removeSlot(index)}
-            canRemove={slots.length > 1}
+            canRemove={false}
           />
         ))}
-        {slots.length < POST_OPTIONS.length && (
-          <button
-            type="button"
-            onClick={addSlot}
-            className="flex-none border border-[#2a2a2a] bg-black px-4 py-[11px] font-display text-[11px] font-bold uppercase tracking-[0.12em] text-white transition-all hover:border-[#ebffa8] hover:bg-[#ebffa8] hover:text-[#0d0d0d]"
-          >
-            + Add post
-          </button>
-        )}
       </div>
+
+      {hasSelection && (
+        <div className="flex flex-wrap items-center gap-5 text-[11px] text-[#a8a8a8]">
+          <span className="flex items-center gap-1.5">
+            <span className="block h-2.5 w-2.5 rounded-full bg-[#ebffa8]" /> Other posts published
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="block h-2.5 w-2.5 rounded-full bg-[#ff6549]" /> Boosted (ad)
+          </span>
+        </div>
+      )}
 
       {error && <p className="text-sm text-[#ff6549]">{error}</p>}
 
@@ -721,36 +537,6 @@ export default function ComparePost() {
         </div>
       </div>
 
-      {/* Growth per interval (bars) — reads the pace: fast, popped, slowed, sped up */}
-      <div className="border border-[#1f1f1f] bg-[#121212]">
-        <div className="flex items-baseline justify-between border-b border-[#1f1f1f] px-6 py-5">
-          <h4 className="font-display text-[16px] font-semibold text-white">Growth per Interval</h4>
-          <span className="text-xs text-[#e6e6e6]">Views gained each {bucketLabel} bucket</span>
-        </div>
-        <div className="px-6 pb-6 pt-5">
-          {hasSelection ? (
-            <div ref={growthRef} className="h-[440px] w-full" />
-          ) : (
-            <p className="py-16 text-center text-sm text-[#e6e6e6]">Search for posts above to compare.</p>
-          )}
-        </div>
-      </div>
-
-      {/* Aligned growth — both posts start at t=0, x-axis steps by the bucket */}
-      <div className="border border-[#1f1f1f] bg-[#121212]">
-        <div className="flex items-baseline justify-between border-b border-[#1f1f1f] px-6 py-5">
-          <h4 className="font-display text-[16px] font-semibold text-white">Aligned Growth · from post time</h4>
-          <span className="text-xs text-[#e6e6e6]">Both start at 0 · steps of {bucketLabel}</span>
-        </div>
-        <div className="px-6 pb-6 pt-5">
-          {hasSelection ? (
-            <div ref={alignedRef} className="h-[460px] w-full" />
-          ) : (
-            <p className="py-16 text-center text-sm text-[#e6e6e6]">Search for posts above to compare.</p>
-          )}
-        </div>
-      </div>
-
       {/* Head to Head (first two selected posts) */}
       {showH2H && (
         <div className="border border-[#232323] bg-black">
@@ -797,47 +583,6 @@ export default function ComparePost() {
               </div>
             );
           })}
-        </div>
-      )}
-
-      {/* Interval detail — opened by clicking a bar in Growth per Interval */}
-      {detail && (
-        <div
-          onClick={() => setDetail(null)}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md border border-[#2a2a2a] bg-[#0d0d0d] shadow-2xl"
-          >
-            <div className="flex items-center justify-between border-b border-[#1f1f1f] px-6 py-4">
-              <h4 className="font-display text-[15px] font-semibold text-white">{detail.post}</h4>
-              <button
-                type="button"
-                onClick={() => setDetail(null)}
-                aria-label="Close"
-                className="px-1.5 text-xl leading-none text-[#a8a8a8] transition-colors hover:text-[#ebffa8]"
-              >
-                ×
-              </button>
-            </div>
-            <dl className="divide-y divide-[#161616]">
-              {[
-                ['Interval start', formatAxisDateTime(detail.tStart)],
-                ['Interval end', formatAxisDateTime(detail.tEnd)],
-                ['Interval length', detail.length],
-                ['Views in interval', fmt(detail.views)],
-                ['Cumulative views', fmt(detail.cumulative)],
-              ].map(([k, v]) => (
-                <div key={k} className="flex items-baseline justify-between gap-4 px-6 py-3.5">
-                  <dt className="font-display text-[10px] font-bold uppercase tracking-[0.14em] text-[#e6e6e6]">
-                    {k}
-                  </dt>
-                  <dd className="text-right font-mono text-[13px] text-white">{v}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
         </div>
       )}
     </div>
