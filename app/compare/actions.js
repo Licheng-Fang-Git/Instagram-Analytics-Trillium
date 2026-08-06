@@ -141,20 +141,46 @@ export async function getPostSummary(postCode) {
     const link = data[0]?.Link?.trim() || null;
     const metrics = await getPostMetrics({ post_link: link });
 
-    // Ad boost dates from the "Ad" column (a date when the post was boosted).
-    // Not every sheet/row has one; collect the distinct, parseable ones.
-    const adDates = [
-        ...new Set(
-            data
-                .map((r) => r['Ad'])
-                .filter((v) => v != null && String(v).trim() !== '')
-                .map((v) => String(v).trim())
-        ),
-    ]
-        .map((v) => parseTs(v))
-        .filter((t) => Number.isFinite(t));
+    // Daily ad-boost entries. The organic view series is left untouched — ad
+    // views are drawn as their own bar overlay, not folded into the lines.
+    const adEntries = parseAdEntries(data);
 
-    return { rows: normalizeRows(data), link, metrics, adDates };
+    // Ad views to draw as bars: only the days that actually carry view data
+    // (empty / "n/a" days have no bar).
+    const adViews = adEntries
+        .filter((e) => e.views != null)
+        .map((e) => ({ t: e.date, views: e.views }));
+
+    // Boosted orange markers: the boost ran from the first ad date to the last,
+    // so mark those two moments (start filled, end hollow).
+    const adWindows = adEntries.length
+        ? [{
+            start: Math.min(...adEntries.map((e) => e.date)),
+            end: Math.max(...adEntries.map((e) => e.date)),
+        }]
+        : [];
+
+    return { rows: normalizeRows(data), link, metrics, adWindows, adViews };
+}
+
+// Pull the post's daily ad-boost entries from the "Ad Dates" column (a couple of
+// sheets label it "Ad Start") plus "Ad Views". Each entry is a { date, views }
+// pair; an empty or "n/a" view cell means "boosted that day, but no view data",
+// so the date is kept (for the boost markers) while views stays null (nothing to
+// fold in). Rows without a parseable date are skipped.
+function parseAdEntries(data) {
+    const entries = [];
+    for (const r of data) {
+        const rawDate = r['Ad Dates'] != null ? r['Ad Dates'] : r['Ad Start'];
+        const dStr = rawDate != null ? String(rawDate).trim() : '';
+        if (!dStr) continue;
+        const date = parseTs(dStr);
+        if (!Number.isFinite(date)) continue;
+        const vStr = r['Ad Views'] != null ? String(r['Ad Views']).trim() : '';
+        const views = vStr === '' || vStr.toLowerCase() === 'n/a' ? NaN : Number(vStr);
+        entries.push({ date, views: Number.isFinite(views) ? views : null });
+    }
+    return entries;
 }
 
 // Aggregate metrics for every post, for the overview "Top Posts" table.

@@ -94,19 +94,88 @@ function getCrossPostMarks(slot, allPostDates, ownPoints, color) {
     }));
 }
 
-// Orange markers at this post's own ad-boost dates (from the "Ad" column).
-function getAdMarks(adDates, ownPoints) {
-  if (!adDates?.length || !ownPoints.length) return [];
-  const start = ownPoints[0][0];
-  const end = ownPoints[ownPoints.length - 1][0];
-  return adDates
-    .filter((t) => Number.isFinite(t) && t >= start && t <= end)
-    .map((t) => ({
-      name: 'Boosted (ad)',
-      coord: [t, interpolateValue(ownPoints, t)],
-      symbolSize: 11,
-      itemStyle: { color: '#ff6549', borderColor: '#0d0d0d', borderWidth: 1 },
-    }));
+// The two ends of an ad window rendered as distinct markers: a FILLED orange
+// dot at the boost start, a HOLLOW orange ring at the boost end, so both the
+// "ad turned on" and "ad turned off" moments read at a glance.
+const AD_ENDS = [
+  { field: 'start', name: 'Boost started', style: { color: '#ff6549', borderColor: '#0d0d0d', borderWidth: 1 } },
+  { field: 'end', name: 'Boost ended', style: { color: '#0d0d0d', borderColor: '#ff6549', borderWidth: 2 } },
+];
+
+// Orange ad-window markers on the absolute-time axis (None / 24h buckets):
+// one point per boost start/end that falls inside this line's visible window.
+function getAdMarks(adWindows, ownPoints) {
+  if (!adWindows?.length || !ownPoints.length) return [];
+  const lo = ownPoints[0][0];
+  const hi = ownPoints[ownPoints.length - 1][0];
+  const marks = [];
+  for (const w of adWindows) {
+    for (const { field, name, style } of AD_ENDS) {
+      const t = w[field];
+      if (!Number.isFinite(t) || t < lo || t > hi) continue;
+      marks.push({
+        name,
+        coord: [t, interpolateValue(ownPoints, t)],
+        symbolSize: 11,
+        itemStyle: style,
+      });
+    }
+  }
+  return marks;
+}
+
+// Same ad-window markers, but for the ALIGNED (elapsed-step) buckets, where the
+// x-axis is a category index rather than a timestamp. `points` is this post's
+// bucketed series ([absTEnd, value] pairs); each ad time maps to the category
+// index of the bucket that first reaches it, so the marker sits on the line —
+// and only ads inside this bucket view's covered timeframe are kept.
+function getAdMarksAligned(adWindows, points) {
+  if (!adWindows?.length || !points.length) return [];
+  const lo = points[0][0];
+  const hi = points[points.length - 1][0];
+  const marks = [];
+  for (const w of adWindows) {
+    for (const { field, name, style } of AD_ENDS) {
+      const t = w[field];
+      if (!Number.isFinite(t) || t < lo || t > hi) continue;
+      let idx = points.findIndex((p) => p[0] >= t);
+      if (idx === -1) idx = points.length - 1;
+      marks.push({ name, coord: [idx, points[idx][1]], symbolSize: 11, itemStyle: style });
+    }
+  }
+  return marks;
+}
+
+// Ad-view bar data on the absolute-time axis (None / 24h): one [timestamp,
+// views] bar per boosted day that falls inside this line's visible window.
+function getAdViewBarsAbsolute(adViews, ownPoints) {
+  if (!adViews?.length || !ownPoints.length) return [];
+  const lo = ownPoints[0][0];
+  const hi = ownPoints[ownPoints.length - 1][0];
+  return adViews.filter((a) => a.t >= lo && a.t <= hi).map((a) => [a.t, a.views]);
+}
+
+// Ad-view bar data for the ALIGNED (elapsed-step) buckets: a length-`maxLen`
+// array (one slot per category) with each boosted day's views placed at the
+// bucket that first reaches it, null elsewhere — and only days inside this
+// bucket view's covered timeframe are kept.
+function getAdViewBarsAligned(adViews, points, maxLen) {
+  const data = new Array(maxLen).fill(null);
+  if (!adViews?.length || !points.length) return data;
+  const lo = points[0][0];
+  const hi = points[points.length - 1][0];
+  for (const a of adViews) {
+    if (a.t < lo || a.t > hi) continue;
+    let idx = points.findIndex((p) => p[0] >= a.t);
+    if (idx === -1) idx = points.length - 1;
+    if (idx < maxLen) data[idx] = (data[idx] || 0) + a.views;
+  }
+  return data;
+}
+
+// Whether an aligned bar array actually carries any values.
+function hasBars(arr) {
+  return Array.isArray(arr) && arr.some((v) => v != null);
 }
 
 function markPoint(data) {
@@ -291,8 +360,8 @@ export default function ComparePost() {
       if (!inst.current) inst.current = echarts.init(ref.current);
       const chart = inst.current;
 
-      const series = perSlot.map((p) =>
-        
+      const lineSeries = perSlot.map((p) =>
+
         aligned
           ? {
               name: p.name,
@@ -307,6 +376,7 @@ export default function ComparePost() {
               ),
               lineStyle: { width: 2.25, color: p.color },
               itemStyle: { color: p.color },
+              markPoint: markPoint(getAdMarksAligned(p.slot.series.adWindows, p[key])),
             }
           : {
               name: p.name,
@@ -318,10 +388,34 @@ export default function ComparePost() {
               itemStyle: { color: p.color },
               markPoint: markPoint([
                 ...getCrossPostMarks(p.slot, allPostDates, p[key], p.color),
-                ...getAdMarks(p.slot.series.adDates, p[key]),
+                ...getAdMarks(p.slot.series.adWindows, p[key]),
               ]),
             }
       );
+
+      // Ad views drawn as their own orange bars on a secondary axis (an overlay,
+      // not folded into the lines) — one bar series per post that has ad-view
+      // data inside this bucket view's range.
+      const barSeries = [];
+      perSlot.forEach((p) => {
+        const barData = aligned
+          ? getAdViewBarsAligned(p.slot.series.adViews, p[key], maxLen)
+          : getAdViewBarsAbsolute(p.slot.series.adViews, p[key]);
+        if (aligned ? hasBars(barData) : barData.length) {
+          barSeries.push({
+            name: `${p.name} · ad views`,
+            type: 'bar',
+            data: barData,
+            yAxisIndex: 1,
+            barMaxWidth: 20,
+            itemStyle: { color: 'rgba(255,101,73,0.6)' },
+            z: 1,
+          });
+        }
+      });
+
+      const series = [...lineSeries, ...barSeries];
+      const hasAdBars = barSeries.length > 0;
 
       const xAxis = aligned
         ? {
@@ -358,7 +452,21 @@ export default function ComparePost() {
           },
           grid: { top: 16, left: 8, right: aligned ? 8 : 16, bottom: aligned ? 52 : 40, containLabel: true },
           xAxis,
-          yAxis: valueAxis(),
+          yAxis: hasAdBars
+            ? [
+                valueAxis(),
+                {
+                  type: 'value',
+                  position: 'right',
+                  name: 'Ad views',
+                  nameLocation: 'end',
+                  nameGap: 14,
+                  nameTextStyle: { color: '#dfdecc', align: 'right' },
+                  axisLabel: { color: '#e8e8e8' },
+                  splitLine: { show: false },
+                },
+              ]
+            : valueAxis(),
           series,
         },
         { notMerge: true }
@@ -447,7 +555,10 @@ export default function ComparePost() {
             <span className="block h-2.5 w-2.5 rounded-full bg-[#ebffa8]" /> Other posts published
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="block h-2.5 w-2.5 rounded-full bg-[#ff6549]" /> Boosted (ad)
+            <span className="block h-2.5 w-2.5 rounded-full bg-[#ff6549]" /> Boost started
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="block h-2.5 w-2.5 rounded-full border-2 border-[#ff6549] bg-[#0d0d0d]" /> Boost ended
           </span>
         </div>
       )}
