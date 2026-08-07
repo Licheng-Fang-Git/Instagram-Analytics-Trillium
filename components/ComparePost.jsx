@@ -30,16 +30,6 @@ function fmt(n) {
 function labelFor(code) {
   return POST_OPTIONS.find((p) => p.code === code)?.label || code;
 }
-// Engagement rate = interactions / reach, as a percentage.
-function engRate(m) {
-  const reach = Number(m?.reach) || 0;
-  if (!reach) return 0;
-  return (
-    (((Number(m.likes) || 0) + (Number(m.saves) || 0) + (Number(m.comments) || 0) + (Number(m.shares) || 0)) /
-      reach) *
-    100
-  );
-}
 
 // Minutes per bucket, for the elapsed-time ("aligned") x-axis labels.
 const BUCKET_MIN = { '0:15': 15, '0:30': 30, '1:00': 60, '6:00': 360, '24:00:00': 1440 };
@@ -52,6 +42,15 @@ const DAY_MS = 86400000;
 // A day-only axis label ("Jun 25") for the absolute-time charts.
 function dayLabel(ts) {
   return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+// Snap a timestamp down to local midnight. The 24h buckets end at the post's
+// time-of-day (e.g. 2:42 PM), which would sit ~15h off the day-axis ticks and
+// the midnight-anchored ad bars — snapping them to their day lines everything up.
+function dayFloor(ts) {
+  const d = new Date(ts);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
 }
 
 // A compact elapsed-time label ("15m", "1h 30m", "1d 6h") for a minute count.
@@ -89,6 +88,7 @@ function getCrossPostMarks(slot, allPostDates, ownPoints, color) {
     .map(({ opt, meta }) => ({
       name: opt.label,
       link: meta.link,
+      code: opt.code,
       coord: [meta.postedAt, interpolateValue(ownPoints, meta.postedAt)],
       itemStyle: { color, borderColor: '#0d0d0d', borderWidth: 1 },
     }));
@@ -274,6 +274,14 @@ export default function ComparePost() {
   const intervalRef = useRef(null);
   const intervalInst = useRef(null);
   const nextSlotId = useRef(2);
+  // Cache of other posts' full series (for the hover preview) + the currently
+  // hovered marker token, so a slow fetch that resolves after the pointer has
+  // moved on doesn't draw a stale preview.
+  const seriesCacheRef = useRef(new Map());
+  const hoveredRef = useRef(null);
+  // Which post's preview line is currently shown on each chart (by chart key),
+  // so clicking the same marker again toggles it off.
+  const overlayCodeRef = useRef({});
 
   const [slots, setSlots] = useState([{ id: 0, ...EMPTY_SLOT }]);
   const [error, setError] = useState(null);
@@ -337,12 +345,18 @@ export default function ComparePost() {
   // each post's own post time (elapsed x-axis, both starting at step 0); for
   // 24h / None they stay on the shared absolute-time axis.
   useEffect(() => {
+    hoveredRef.current = null;
+    overlayCodeRef.current = {};
     const aligned = ALIGN_BUCKETS.includes(bucket);
     const bmin = BUCKET_MIN[bucket] || null;
+    // The 24h buckets end at the post's time-of-day; snap them to the day so
+    // the points sit on the day-axis ticks and line up with the ad bars.
+    const dayBucket = bucket === '24:00:00';
 
     const perSlot = activeSlots.map(({ slot, color }) => {
       const f = seriesForBucket(slot.series.rows, bucket);
-      return { name: slot.selected.label, color, slot, cumulative: f.cumulative, interval: f.interval };
+      const snap = (pts) => (dayBucket ? pts.map(([t, v]) => [dayFloor(t), v]) : pts);
+      return { name: slot.selected.label, color, slot, cumulative: snap(f.cumulative), interval: snap(f.interval) };
     });
     const maxLen = Math.max(0, ...perSlot.map((p) => p.interval.length));
     const categories = aligned
@@ -360,10 +374,11 @@ export default function ComparePost() {
       if (!inst.current) inst.current = echarts.init(ref.current);
       const chart = inst.current;
 
-      const lineSeries = perSlot.map((p) =>
+      const lineSeries = perSlot.map((p, i) =>
 
         aligned
           ? {
+              id: 'line-' + i,
               name: p.name,
               type: 'line',
               smooth: true,
@@ -371,14 +386,15 @@ export default function ComparePost() {
               symbol: 'circle',
               symbolSize: 5,
               connectNulls: true,
-              data: Array.from({ length: maxLen }, (_, i) =>
-                i < p[key].length ? Number(p[key][i][1]) || 0 : null
+              data: Array.from({ length: maxLen }, (_, j) =>
+                j < p[key].length ? Number(p[key][j][1]) || 0 : null
               ),
               lineStyle: { width: 2.25, color: p.color },
               itemStyle: { color: p.color },
               markPoint: markPoint(getAdMarksAligned(p.slot.series.adWindows, p[key])),
             }
           : {
+              id: 'line-' + i,
               name: p.name,
               type: 'line',
               smooth: true,
@@ -397,12 +413,13 @@ export default function ComparePost() {
       // not folded into the lines) — one bar series per post that has ad-view
       // data inside this bucket view's range.
       const barSeries = [];
-      perSlot.forEach((p) => {
+      perSlot.forEach((p, i) => {
         const barData = aligned
           ? getAdViewBarsAligned(p.slot.series.adViews, p[key], maxLen)
           : getAdViewBarsAbsolute(p.slot.series.adViews, p[key]);
         if (aligned ? hasBars(barData) : barData.length) {
           barSeries.push({
+            id: 'bar-' + i,
             name: `${p.name} · ad views`,
             type: 'bar',
             data: barData,
@@ -416,6 +433,100 @@ export default function ComparePost() {
 
       const series = [...lineSeries, ...barSeries];
       const hasAdBars = barSeries.length > 0;
+      const currentName = perSlot[0]?.name || '';
+
+      // Y axes:
+      //  [0] left  — the current post's views (always on).
+      //  [1] right — "Ad views" for the bars (only when there are bars).
+      //  [last] right — the clicked post's own scale for its preview line;
+      //         hidden until a marker is clicked, at which point the "Ad views"
+      //         axis + bars step aside and this shows the previewed post's data.
+      const yAxes = [
+        { ...valueAxis(), name: '', nameLocation: 'end', nameGap: 14, nameTextStyle: { color: '#dfdecc', align: 'left' } },
+      ];
+      let adAxisIndex = -1;
+      if (hasAdBars) {
+        adAxisIndex = yAxes.length;
+        yAxes.push({
+          type: 'value',
+          position: 'right',
+          name: 'Ad views',
+          nameLocation: 'end',
+          nameGap: 14,
+          nameTextStyle: { color: '#dfdecc', align: 'right' },
+          axisLabel: { color: '#e8e8e8' },
+          splitLine: { show: false },
+        });
+      }
+      const previewAxisIndex = yAxes.length;
+      yAxes.push({
+        type: 'value',
+        position: 'right',
+        show: false,
+        scale: true,
+        name: '',
+        nameLocation: 'end',
+        nameGap: 14,
+        nameTextStyle: { color: '#d9d4cb', align: 'right' },
+        axisLabel: { color: '#d9d4cb' },
+        splitLine: { show: false },
+      });
+
+      // Toggle the clicked post's preview line + its own right axis on/off.
+      // Showing it hides the "Ad views" axis and its bars (they step aside for
+      // the previewed post's scale); hiding it restores them.
+      const showPreview = async (code) => {
+        const token = `${key}:${code}`;
+        hoveredRef.current = token;
+        overlayCodeRef.current[key] = code;
+        let s = seriesCacheRef.current.get(code);
+        if (!s) {
+          try {
+            s = await getPostSummary(code);
+            seriesCacheRef.current.set(code, s);
+          } catch {
+            return;
+          }
+        }
+        if (hoveredRef.current !== token) return; // toggled/changed while loading
+        let pts = seriesForBucket(s.rows, bucket)[key];
+        if (dayBucket) pts = pts.map(([t, v]) => [dayFloor(t), v]);
+        const yUpdate = yAxes.map(() => ({}));
+        yUpdate[0] = { name: currentName };
+        if (adAxisIndex >= 0) yUpdate[adAxisIndex] = { show: false };
+        yUpdate[previewAxisIndex] = { show: true, name: labelFor(code) };
+        chart.setOption({
+          yAxis: yUpdate,
+          series: [
+            {
+              id: 'overlay',
+              name: labelFor(code) + ' · preview',
+              type: 'line',
+              data: pts,
+              yAxisIndex: previewAxisIndex,
+              smooth: true,
+              showSymbol: false,
+              silent: true,
+              z: 0,
+              lineStyle: { width: 2, color: 'rgba(217,212,203,0.65)' },
+              areaStyle: { color: 'rgba(217,212,203,0.08)' },
+            },
+            ...barSeries.map((b) => ({ id: b.id, data: [] })),
+          ],
+        });
+      };
+      const hidePreview = () => {
+        hoveredRef.current = null;
+        overlayCodeRef.current[key] = null;
+        const yUpdate = yAxes.map(() => ({}));
+        yUpdate[0] = { name: '' };
+        if (adAxisIndex >= 0) yUpdate[adAxisIndex] = { show: true };
+        yUpdate[previewAxisIndex] = { show: false, name: '' };
+        chart.setOption({
+          yAxis: yUpdate,
+          series: [{ id: 'overlay', data: [] }, ...barSeries.map((b) => ({ id: b.id, data: b.data }))],
+        });
+      };
 
       const xAxis = aligned
         ? {
@@ -452,32 +563,25 @@ export default function ComparePost() {
           },
           grid: { top: 16, left: 8, right: aligned ? 8 : 16, bottom: aligned ? 52 : 40, containLabel: true },
           xAxis,
-          yAxis: hasAdBars
-            ? [
-                valueAxis(),
-                {
-                  type: 'value',
-                  position: 'right',
-                  name: 'Ad views',
-                  nameLocation: 'end',
-                  nameGap: 14,
-                  nameTextStyle: { color: '#dfdecc', align: 'right' },
-                  axisLabel: { color: '#e8e8e8' },
-                  splitLine: { show: false },
-                },
-              ]
-            : valueAxis(),
+          yAxis: yAxes,
           series,
         },
         { notMerge: true }
       );
 
+      // Click a published-post marker to toggle its translucent preview line.
+      // (Hovering just reveals the marker's name via the emphasis label.)
       const onClick = (params) => {
-        if (params.componentType === 'markPoint' && params.data?.link) {
-          window.open(params.data.link, '_blank', 'noopener,noreferrer');
+        if (params.componentType === 'markPoint' && params.data?.code) {
+          if (overlayCodeRef.current[key] === params.data.code) {
+            hidePreview();
+          } else {
+            showPreview(params.data.code);
+          }
         }
       };
       chart.on('click', onClick);
+
       const onResize = () => chart.resize();
       window.addEventListener('resize', onResize);
       cleanups.push(() => {
@@ -513,23 +617,6 @@ export default function ComparePost() {
     return { name: slot.selected.label, color, total, count: gains.length, peak: peak.t ? peak : null };
   });
 
-  // Head-to-head compares the first two selected posts (in their chart colors).
-  const h2hSlots = activeSlots.slice(0, 2);
-  const showH2H = h2hSlots.length === 2;
-  const mA = h2hSlots[0]?.slot.series.metrics;
-  const mB = h2hSlots[1]?.slot.series.metrics;
-  const h2hRows = showH2H
-    ? [
-        { label: 'Views', a: Number(mA.views) || 0, b: Number(mB.views) || 0 },
-        { label: 'Reach', a: Number(mA.reach) || 0, b: Number(mB.reach) || 0 },
-        { label: 'Likes', a: Number(mA.likes) || 0, b: Number(mB.likes) || 0 },
-        { label: 'Saves', a: Number(mA.saves) || 0, b: Number(mB.saves) || 0 },
-        { label: 'Shares', a: Number(mA.shares) || 0, b: Number(mB.shares) || 0 },
-        { label: 'Follows', a: Number(mA.follows) || 0, b: Number(mB.follows) || 0 },
-        { label: 'Engagement rate', a: engRate(mA), b: engRate(mB), pct: true },
-      ]
-    : [];
-
   return (
     <div className="flex flex-col gap-7">
       {/* Search + add */}
@@ -552,7 +639,7 @@ export default function ComparePost() {
       {hasSelection && (
         <div className="flex flex-wrap items-center gap-5 text-[11px] text-[#a8a8a8]">
           <span className="flex items-center gap-1.5">
-            <span className="block h-2.5 w-2.5 rounded-full bg-[#ebffa8]" /> Other posts published
+            <span className="block h-2.5 w-2.5 rounded-full bg-[#ebffa8]" /> Other posts published (click to preview)
           </span>
           <span className="flex items-center gap-1.5">
             <span className="block h-2.5 w-2.5 rounded-full bg-[#ff6549]" /> Boost started
@@ -647,55 +734,6 @@ export default function ComparePost() {
           )}
         </div>
       </div>
-
-      {/* Head to Head (first two selected posts) */}
-      {showH2H && (
-        <div className="border border-[#232323] bg-black">
-          <div className="border-b border-[#1f1f1f] px-6 py-5">
-            <h4 className="font-display text-[16px] font-semibold text-white">Head to Head</h4>
-          </div>
-          <div className="grid grid-cols-[1.1fr_1fr_1fr_0.9fr] items-center border-b border-[#1f1f1f] px-6 py-3">
-            <span className="font-display text-[10px] font-bold uppercase tracking-[0.14em] text-[#e6e6e6]">
-              Metric
-            </span>
-            <span className="flex items-center justify-end gap-1.5 text-right text-[11px] text-[#e8e8e8]">
-              <span className="block h-2 w-2 flex-none" style={{ background: h2hSlots[0].color }} />
-              {labelFor(h2hSlots[0].slot.selected.code)}
-            </span>
-            <span className="flex items-center justify-end gap-1.5 text-right text-[11px] text-[#e8e8e8]">
-              <span className="block h-2 w-2 flex-none" style={{ background: h2hSlots[1].color }} />
-              {labelFor(h2hSlots[1].slot.selected.code)}
-            </span>
-            <span className="text-right font-display text-[10px] font-bold uppercase tracking-[0.14em] text-[#e6e6e6]">
-              Delta
-            </span>
-          </div>
-          {h2hRows.map((row) => {
-            const delta = row.b === 0 ? 0 : ((row.a - row.b) / row.b) * 100;
-            const positive = delta >= 0;
-            return (
-              <div
-                key={row.label}
-                className="grid grid-cols-[1.1fr_1fr_1fr_0.9fr] items-center border-b border-[#161616] px-6 py-3.5"
-              >
-                <span className="text-[13px] text-[#e8e8e8]">{row.label}</span>
-                <span className="text-right font-mono text-sm text-white">
-                  {row.pct ? row.a.toFixed(1) + '%' : fmt(row.a)}
-                </span>
-                <span className="text-right font-mono text-sm text-white">
-                  {row.pct ? row.b.toFixed(1) + '%' : fmt(row.b)}
-                </span>
-                <span
-                  className="text-right font-mono text-sm"
-                  style={{ color: positive ? BRAND.accent : BRAND.subtle }}
-                >
-                  {(positive ? '+' : '') + delta.toFixed(0) + '%'}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }
