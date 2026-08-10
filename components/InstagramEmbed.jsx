@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 
 // The post creative: a bracketed portrait frame that shows the fetched image,
 // or a "CREATIVE / {title}" placeholder if there's none (or it can't load).
-export default function PostCreative({ src, title }) {
+export default function InstagramEmbed({ src, title }) {
   const [failed, setFailed] = useState(false);
   const loadedRef = useRef(false);
 

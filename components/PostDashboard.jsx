@@ -1,6 +1,6 @@
 import MetricCards from '@/components/MetricCards';
-import InidiviualCharts from '@/components/InidiviualCharts';
-import PostCreative from '@/components/PostCreative';
+import IndividualCharts from '@/components/IndividualCharts';
+import InstagramEmbed from '@/components/InstagramEmbed';
 import Funnel from '@/components/Funnel';
 import { getInstagramMeta } from '@/app/compare/actions';
 
@@ -51,7 +51,7 @@ export default async function PostDashboard({ title, slug, month, metrics, chart
 
         <MetricCards data={metrics} />
 
-        <InidiviualCharts data={chartData} />
+        <IndividualCharts data={chartData} />
 
         <div className="grid grid-cols-2 items-start gap-5">
           <div className="flex flex-col gap-4 border border-[#1f1f1f] bg-[#121212] p-6">
@@ -77,7 +77,7 @@ export default async function PostDashboard({ title, slug, month, metrics, chart
               </div>
             </div>
 
-            <PostCreative src={imageSrc} title={title} />
+            <InstagramEmbed src={imageSrc} title={title} />
           </div>
 
           <Funnel data={metrics} />

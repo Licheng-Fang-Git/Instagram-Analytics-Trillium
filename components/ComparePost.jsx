@@ -146,36 +146,27 @@ function getAdMarksAligned(adWindows, points) {
   return marks;
 }
 
-// Ad-view bar data on the absolute-time axis (None / 24h): one [timestamp,
-// views] bar per boosted day that falls inside this line's visible window.
-function getAdViewBarsAbsolute(adViews, ownPoints) {
-  if (!adViews?.length || !ownPoints.length) return [];
-  const lo = ownPoints[0][0];
-  const hi = ownPoints[ownPoints.length - 1][0];
-  return adViews.filter((a) => a.t >= lo && a.t <= hi).map((a) => [a.t, a.views]);
-}
-
-// Ad-view bar data for the ALIGNED (elapsed-step) buckets: a length-`maxLen`
-// array (one slot per category) with each boosted day's views placed at the
-// bucket that first reaches it, null elsewhere — and only days inside this
-// bucket view's covered timeframe are kept.
-function getAdViewBarsAligned(adViews, points, maxLen) {
-  const data = new Array(maxLen).fill(null);
-  if (!adViews?.length || !points.length) return data;
+// Same "other post was published here" markers, but for a category (elapsed)
+// x-axis: each other post's publish time maps to the category index of the
+// point that first reaches it, so the marker sits on the line.
+function getCrossPostMarksAligned(slot, allPostDates, points, color) {
+  if (!allPostDates || !points.length) return [];
   const lo = points[0][0];
   const hi = points[points.length - 1][0];
-  for (const a of adViews) {
-    if (a.t < lo || a.t > hi) continue;
-    let idx = points.findIndex((p) => p[0] >= a.t);
-    if (idx === -1) idx = points.length - 1;
-    if (idx < maxLen) data[idx] = (data[idx] || 0) + a.views;
-  }
-  return data;
-}
-
-// Whether an aligned bar array actually carries any values.
-function hasBars(arr) {
-  return Array.isArray(arr) && arr.some((v) => v != null);
+  return POST_OPTIONS.filter((opt) => opt.code !== slot.selected.code)
+    .map((opt) => ({ opt, meta: allPostDates[opt.code] }))
+    .filter(({ meta }) => meta && meta.postedAt > lo && meta.postedAt <= hi)
+    .map(({ opt, meta }) => {
+      let idx = points.findIndex((p) => p[0] >= meta.postedAt);
+      if (idx === -1) idx = points.length - 1;
+      return {
+        name: opt.label,
+        link: meta.link,
+        code: opt.code,
+        coord: [idx, points[idx][1]],
+        itemStyle: { color, borderColor: '#0d0d0d', borderWidth: 1 },
+      };
+    });
 }
 
 function markPoint(data) {
@@ -273,6 +264,8 @@ export default function ComparePost() {
   const cumulativeInst = useRef(null);
   const intervalRef = useRef(null);
   const intervalInst = useRef(null);
+  const adsRef = useRef(null);
+  const adsInst = useRef(null);
   const nextSlotId = useRef(2);
   // Cache of other posts' full series (for the hover preview) + the currently
   // hovered marker token, so a slow fetch that resolves after the pointer has
@@ -347,21 +340,43 @@ export default function ComparePost() {
   useEffect(() => {
     hoveredRef.current = null;
     overlayCodeRef.current = {};
-    const aligned = ALIGN_BUCKETS.includes(bucket);
+    const aligned = ALIGN_BUCKETS.includes(bucket); // fine buckets: uniform elapsed steps
+    const noneBucket = bucket === 'none'; // raw rows, elapsed-from-post (Meta-style)
+    const dayBucket = bucket === '24:00:00'; // absolute day-by-day axis
+    const categoryMode = aligned || noneBucket; // elapsed "time since post" x-axis
     const bmin = BUCKET_MIN[bucket] || null;
-    // The 24h buckets end at the post's time-of-day; snap them to the day so
-    // the points sit on the day-axis ticks and line up with the ad bars.
-    const dayBucket = bucket === '24:00:00';
 
     const perSlot = activeSlots.map(({ slot, color }) => {
       const f = seriesForBucket(slot.series.rows, bucket);
       const snap = (pts) => (dayBucket ? pts.map(([t, v]) => [dayFloor(t), v]) : pts);
-      return { name: slot.selected.label, color, slot, cumulative: snap(f.cumulative), interval: snap(f.interval) };
+      return {
+        name: slot.selected.label,
+        color,
+        slot,
+        t0: slot.series.rows[0]?.tStart ?? f.interval[0]?.[0] ?? 0,
+        cumulative: snap(f.cumulative),
+        interval: snap(f.interval),
+      };
     });
     const maxLen = Math.max(0, ...perSlot.map((p) => p.interval.length));
-    const categories = aligned
-      ? Array.from({ length: maxLen }, (_, i) => (bmin ? '+' + elapsedLabel((i + 1) * bmin) : 'Step ' + (i + 1)))
+
+    // Elapsed-from-post category labels. Fine buckets are uniform steps; None
+    // uses each raw point's real elapsed time, so the axis reads like Meta's
+    // ("15m", "9h", "1d 6h", "7d") — dense early, compressed later.
+    const refP = perSlot.reduce((a, p) => (p.interval.length > (a?.interval.length || 0) ? p : a), null);
+    const categories = categoryMode
+      ? Array.from({ length: maxLen }, (_, i) => {
+          if (aligned) return '+' + elapsedLabel((i + 1) * bmin);
+          const pt = refP && refP.interval[i];
+          return pt ? '+' + elapsedLabel(Math.max(0, Math.round((pt[0] - refP.t0) / 60000))) : '';
+        })
       : null;
+
+    // A post's line data in the current mode: by category index, or [t, v] pairs.
+    const lineData = (pts) =>
+      categoryMode
+        ? Array.from({ length: maxLen }, (_, j) => (j < pts.length ? Number(pts[j][1]) || 0 : null))
+        : pts;
 
     const specs = [
       { ref: cumulativeRef, inst: cumulativeInst, key: 'cumulative' },
@@ -371,110 +386,59 @@ export default function ComparePost() {
     const cleanups = [];
     specs.forEach(({ ref, inst, key }) => {
       if (!ref.current) return;
+      // Re-init if the div was unmounted/remounted (instance bound to a stale node).
+      if (inst.current && inst.current.getDom() !== ref.current) {
+        inst.current.dispose();
+        inst.current = null;
+      }
       if (!inst.current) inst.current = echarts.init(ref.current);
       const chart = inst.current;
 
-      const lineSeries = perSlot.map((p, i) =>
-
-        aligned
-          ? {
-              id: 'line-' + i,
-              name: p.name,
-              type: 'line',
-              smooth: true,
-              showSymbol: maxLen <= 60,
-              symbol: 'circle',
-              symbolSize: 5,
-              connectNulls: true,
-              data: Array.from({ length: maxLen }, (_, j) =>
-                j < p[key].length ? Number(p[key][j][1]) || 0 : null
-              ),
-              lineStyle: { width: 2.25, color: p.color },
-              itemStyle: { color: p.color },
-              markPoint: markPoint(getAdMarksAligned(p.slot.series.adWindows, p[key])),
-            }
-          : {
-              id: 'line-' + i,
-              name: p.name,
-              type: 'line',
-              smooth: true,
-              showSymbol: false,
-              data: p[key],
-              lineStyle: { width: 2.25, color: p.color },
-              itemStyle: { color: p.color },
-              markPoint: markPoint([
+      const lineSeries = perSlot.map((p, i) => ({
+        id: 'line-' + i,
+        name: p.name,
+        type: 'line',
+        smooth: true,
+        showSymbol: categoryMode ? maxLen <= 60 : false,
+        symbol: 'circle',
+        symbolSize: 5,
+        connectNulls: true,
+        data: lineData(p[key]),
+        lineStyle: { width: 2.25, color: p.color },
+        itemStyle: { color: p.color },
+        markPoint: markPoint(
+          categoryMode
+            ? [
+                ...getCrossPostMarksAligned(p.slot, allPostDates, p[key], p.color),
+                ...getAdMarksAligned(p.slot.series.adWindows, p[key]),
+              ]
+            : [
                 ...getCrossPostMarks(p.slot, allPostDates, p[key], p.color),
                 ...getAdMarks(p.slot.series.adWindows, p[key]),
-              ]),
-            }
-      );
+              ]
+        ),
+      }));
 
-      // Ad views drawn as their own orange bars on a secondary axis (an overlay,
-      // not folded into the lines) — one bar series per post that has ad-view
-      // data inside this bucket view's range.
-      const barSeries = [];
-      perSlot.forEach((p, i) => {
-        const barData = aligned
-          ? getAdViewBarsAligned(p.slot.series.adViews, p[key], maxLen)
-          : getAdViewBarsAbsolute(p.slot.series.adViews, p[key]);
-        if (aligned ? hasBars(barData) : barData.length) {
-          barSeries.push({
-            id: 'bar-' + i,
-            name: `${p.name} · ad views`,
-            type: 'bar',
-            data: barData,
-            yAxisIndex: 1,
-            barMaxWidth: 20,
-            itemStyle: { color: 'rgba(255,101,73,0.6)' },
-            z: 1,
-          });
-        }
-      });
-
-      const series = [...lineSeries, ...barSeries];
-      const hasAdBars = barSeries.length > 0;
       const currentName = perSlot[0]?.name || '';
+      // Largest value the current post reaches on this chart — used to name the
+      // shared axis after whichever post (current or previewed) is bigger.
+      const currentMax = Math.max(0, ...perSlot.flatMap((p) => p[key].map((d) => Number(d[1]) || 0)));
 
-      // Y axes:
-      //  [0] left  — the current post's views (always on).
-      //  [1] right — "Ad views" for the bars (only when there are bars).
-      //  [last] right — the clicked post's own scale for its preview line;
-      //         hidden until a marker is clicked, at which point the "Ad views"
-      //         axis + bars step aside and this shows the previewed post's data.
+      // A single value axis on the RIGHT. Both the post line and any preview line
+      // ride it, so ECharts auto-scales it to whichever post has the higher views.
       const yAxes = [
-        { ...valueAxis(), name: '', nameLocation: 'end', nameGap: 14, nameTextStyle: { color: '#dfdecc', align: 'left' } },
-      ];
-      let adAxisIndex = -1;
-      if (hasAdBars) {
-        adAxisIndex = yAxes.length;
-        yAxes.push({
-          type: 'value',
+        {
+          ...valueAxis(),
           position: 'right',
-          name: 'Ad views',
+          name: currentName,
           nameLocation: 'end',
           nameGap: 14,
-          nameTextStyle: { color: '#dfdecc', align: 'right' },
-          axisLabel: { color: '#e8e8e8' },
-          splitLine: { show: false },
-        });
-      }
-      const previewAxisIndex = yAxes.length;
-      yAxes.push({
-        type: 'value',
-        position: 'right',
-        show: false,
-        scale: true,
-        name: '',
-        nameLocation: 'end',
-        nameGap: 14,
-        nameTextStyle: { color: '#d9d4cb', align: 'right' },
-        axisLabel: { color: '#d9d4cb' },
-        splitLine: { show: false },
-      });
+          nameTextStyle: { color: BRAND.white, align: 'right' },
+        },
+      ];
 
-      // Toggle the clicked post's preview line + its own right axis on/off.
-      // Showing it hides the "Ad views" axis and its bars (they step aside for
-      // the previewed post's scale); hiding it restores them.
+      // Click a published-post marker -> overlay that post's curve on the same
+      // axis; the axis is named after whichever post is larger. Click again to clear.
       const showPreview = async (code) => {
         const token = `${key}:${code}`;
         hoveredRef.current = token;
@@ -491,55 +455,42 @@ export default function ComparePost() {
         if (hoveredRef.current !== token) return; // toggled/changed while loading
         let pts = seriesForBucket(s.rows, bucket)[key];
         if (dayBucket) pts = pts.map(([t, v]) => [dayFloor(t), v]);
-        const yUpdate = yAxes.map(() => ({}));
-        yUpdate[0] = { name: currentName };
-        if (adAxisIndex >= 0) yUpdate[adAxisIndex] = { show: false };
-        yUpdate[previewAxisIndex] = { show: true, name: labelFor(code) };
+        const previewMax = Math.max(0, ...pts.map((d) => Number(d[1]) || 0));
         chart.setOption({
-          yAxis: yUpdate,
+          yAxis: [{ name: previewMax > currentMax ? labelFor(code) : currentName }],
           series: [
             {
               id: 'overlay',
               name: labelFor(code) + ' · preview',
               type: 'line',
-              data: pts,
-              yAxisIndex: previewAxisIndex,
+              data: lineData(pts),
               smooth: true,
               showSymbol: false,
               silent: true,
               z: 0,
-              lineStyle: { width: 2, color: 'rgba(217,212,203,0.65)' },
-              areaStyle: { color: 'rgba(217,212,203,0.08)' },
+              lineStyle: { width: 2, color: 'rgba(217,212,203,0.8)' },
             },
-            ...barSeries.map((b) => ({ id: b.id, data: [] })),
           ],
         });
       };
       const hidePreview = () => {
         hoveredRef.current = null;
         overlayCodeRef.current[key] = null;
-        const yUpdate = yAxes.map(() => ({}));
-        yUpdate[0] = { name: '' };
-        if (adAxisIndex >= 0) yUpdate[adAxisIndex] = { show: true };
-        yUpdate[previewAxisIndex] = { show: false, name: '' };
-        chart.setOption({
-          yAxis: yUpdate,
-          series: [{ id: 'overlay', data: [] }, ...barSeries.map((b) => ({ id: b.id, data: b.data }))],
-        });
+        chart.setOption({ yAxis: [{ name: currentName }], series: [{ id: 'overlay', data: [] }] });
       };
 
-      const xAxis = aligned
+      const xAxis = categoryMode
         ? {
             type: 'category',
             data: categories,
-            name: bmin ? 'Time since post' : 'Step',
+            name: 'Time since post',
             nameLocation: 'middle',
             nameGap: 34,
-            nameTextStyle: { color: BRAND.subtle, fontFamily: BRAND.sans, fontSize: 12 },
+            nameTextStyle: { color: BRAND.white, fontFamily: BRAND.sans, fontSize: 12 },
             axisLine,
             axisTick: { show: false },
             splitLine: { show: false },
-            axisLabel: { ...axisLabel, rotate: categories.length > 12 ? 38 : 0, hideOverlap: true },
+            axisLabel: { ...axisLabel, rotate: maxLen > 12 ? 38 : 0, hideOverlap: true },
           }
         : {
             type: 'time',
@@ -557,27 +508,22 @@ export default function ComparePost() {
           tooltip: brandTooltip,
           legend: {
             bottom: 0,
-            data: series.map((s) => s.name),
+            data: lineSeries.map((s) => s.name),
             textStyle: { color: BRAND.legend, fontFamily: BRAND.sans, fontSize: 12 },
             inactiveColor: '#4a4a4a',
           },
-          grid: { top: 16, left: 8, right: aligned ? 8 : 16, bottom: aligned ? 52 : 40, containLabel: true },
+          grid: { top: 16, left: 16, right: 16, bottom: categoryMode ? 52 : 40, containLabel: true },
           xAxis,
           yAxis: yAxes,
-          series,
+          series: lineSeries,
         },
         { notMerge: true }
       );
 
-      // Click a published-post marker to toggle its translucent preview line.
-      // (Hovering just reveals the marker's name via the emphasis label.)
       const onClick = (params) => {
         if (params.componentType === 'markPoint' && params.data?.code) {
-          if (overlayCodeRef.current[key] === params.data.code) {
-            hidePreview();
-          } else {
-            showPreview(params.data.code);
-          }
+          if (overlayCodeRef.current[key] === params.data.code) hidePreview();
+          else showPreview(params.data.code);
         }
       };
       chart.on('click', onClick);
@@ -590,6 +536,58 @@ export default function ComparePost() {
       });
     });
 
+    // Ads-by-day chart: ad views per boosted day (orange line, one point/day).
+    if (adsRef.current) {
+      if (adsInst.current && adsInst.current.getDom() !== adsRef.current) {
+        adsInst.current.dispose();
+        adsInst.current = null;
+      }
+      if (!adsInst.current) adsInst.current = echarts.init(adsRef.current);
+      const adChart = adsInst.current;
+      const adSeries = perSlot
+        .filter((p) => (p.slot.series.adViews || []).length)
+        .map((p) => ({
+          name: p.name,
+          type: 'line',
+          smooth: true,
+          showSymbol: true,
+          symbol: 'circle',
+          symbolSize: 6,
+          data: p.slot.series.adViews.map((a) => [dayFloor(a.t), a.views]),
+          lineStyle: { width: 2.25, color: '#ff6549' },
+          itemStyle: { color: '#ff6549' },
+          areaStyle: { color: 'rgba(255,101,73,0.08)' },
+        }));
+      adChart.setOption(
+        {
+          backgroundColor: 'transparent',
+          tooltip: brandTooltip,
+          grid: { top: 16, left: 16, right: 16, bottom: 40, containLabel: true },
+          xAxis: {
+            type: 'time',
+            minInterval: DAY_MS,
+            maxInterval: DAY_MS,
+            axisLine,
+            axisTick: { show: false },
+            splitLine: { show: false },
+            axisLabel: { ...axisLabel, formatter: dayLabel, rotate: 38, hideOverlap: true },
+          },
+          yAxis: {
+            ...valueAxis(),
+            name: 'Ad views',
+            nameLocation: 'end',
+            nameGap: 14,
+            nameTextStyle: { color: BRAND.white, align: 'left' },
+          },
+          series: adSeries,
+        },
+        { notMerge: true }
+      );
+      const onResize = () => adChart.resize();
+      window.addEventListener('resize', onResize);
+      cleanups.push(() => window.removeEventListener('resize', onResize));
+    }
+
     return () => cleanups.forEach((fn) => fn());
   }, [slots, allPostDates, bucket]);
 
@@ -597,12 +595,14 @@ export default function ComparePost() {
     return () => {
       cumulativeInst.current?.dispose();
       intervalInst.current?.dispose();
+      adsInst.current?.dispose();
     };
   }, []);
 
   const bucketLabel = BUCKET_OPTIONS.find((o) => o.value === bucket)?.label || bucket;
-  const alignedMode = ALIGN_BUCKETS.includes(bucket);
-  const lineAxisNote = alignedMode ? `Aligned from post time · ${bucketLabel}` : `Absolute time · ${bucketLabel}`;
+  const timeSincePost = ALIGN_BUCKETS.includes(bucket) || bucket === 'none';
+  const lineAxisNote = timeSincePost ? `Time since post · ${bucketLabel}` : `Absolute time · ${bucketLabel}`;
+  const hasAdViews = activeSlots.some(({ slot }) => (slot.series.adViews || []).length);
 
   // Per-post summary for the selected bucket: the number each post "got to",
   // how many buckets it took, and its biggest single-bucket surge — so a bucket
@@ -734,6 +734,19 @@ export default function ComparePost() {
           )}
         </div>
       </div>
+
+      {/* Ad views by day (boosted-post spend window) */}
+      {hasAdViews && (
+        <div className="border border-[#1f1f1f] bg-[#121212]">
+          <div className="flex items-baseline justify-between border-b border-[#1f1f1f] px-6 py-5">
+            <h4 className="font-display text-[16px] font-semibold text-white">Ad Views by Day</h4>
+            <span className="text-xs text-[#e6e6e6]">Views the boost drove, per day</span>
+          </div>
+          <div className="px-6 pb-6 pt-5">
+            <div ref={adsRef} className="h-[300px] w-full" />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

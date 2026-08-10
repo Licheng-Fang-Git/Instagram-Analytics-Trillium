@@ -13,7 +13,23 @@ function shortCat(full) {
   return `${p[1]} ${p[2]} ${p[3].split(':')[0]}${p[4][0].toLowerCase()}`;
 }
 
-export default function InidiviualCharts({ data }) {
+const DAY_MS = 86400000;
+
+// A day-only axis label ("Jun 25").
+function dayLabel(ts) {
+  return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+// Snap a timestamp to local midnight. The 24h buckets end at the post's
+// time-of-day (e.g. 1:43 PM), which sits ~15h off the day-axis ticks — snapping
+// them to their day lines the bars/points up with the day labels.
+function dayFloor(ts) {
+  const d = new Date(ts);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+export default function IndividualCharts({ data }) {
   const ASSUMED_YEAR = 2026;
   const chartRef = useRef(null);
   const chartInstanceRef = useRef(null);
@@ -48,17 +64,25 @@ export default function InidiviualCharts({ data }) {
     let cumulative = [[]];
     let interval = [[]];
 
+    // The 24h buckets end at the post's time-of-day; snap them to the day so
+    // the bars/points sit on the day-axis ticks.
+    const dayBucket = bucket === '24:00:00';
+
     if (bucket === 'none') {
       data.forEach((one_row) => {
         raw_cumulative.push(one_row['Cumulative Views']);
         raw_interval.push(one_row['Views in Interval']);
-        timeEnds.push(formatAxisDateTime(parseTs(one_row['Interval Start'])));
+        // Label by Interval END, matching the bucketed views and the cumulative
+        // point (which is the value as of the interval's close) — so the same
+        // row lands on the same date in every bucket size.
+        timeEnds.push(formatAxisDateTime(parseTs(one_row['Interval End'])));
       });
     } else {
       const rows = normalizeRows(data);
       const result = bucketByIntervalLength(rows, bucket);
-      cumulative = result.cumulative;
-      interval = result.interval;
+      const snap = (pts) => (dayBucket ? pts.map(([t, v]) => [dayFloor(t), v]) : pts);
+      cumulative = snap(result.cumulative);
+      interval = snap(result.interval);
     }
 
     chart.setOption(
@@ -69,13 +93,16 @@ export default function InidiviualCharts({ data }) {
         xAxis: {
           type: bucket === 'none' ? 'category' : 'time',
           data: bucket === 'none' ? timeEnds : undefined,
+          ...(dayBucket ? { minInterval: DAY_MS, maxInterval: DAY_MS } : {}),
           axisLine,
           axisTick: { show: false },
           splitLine: { show: false },
           axisLabel:
             bucket === 'none'
-              ? { ...axisLabel, rotate: 38, color: '#F5F5F5', hideOverlap: true, interval: 'auto', formatter: shortCat }
-              : { ...axisLabel, formatter: formatAxisDateTimeShort, rotate: 38, color: '#F5F5F5', hideOverlap: true },
+              ? { ...axisLabel, rotate: 38, hideOverlap: true, interval: 'auto', formatter: shortCat }
+              : dayBucket
+                ? { ...axisLabel, formatter: dayLabel, rotate: 38, hideOverlap: true }
+                : { ...axisLabel, formatter: formatAxisDateTimeShort, rotate: 38, hideOverlap: true },
         },
         yAxis: [
           {
@@ -84,10 +111,10 @@ export default function InidiviualCharts({ data }) {
             position: 'left',
             nameLocation: 'end',
             nameGap: 14,
-            axisLabel: { color: '#e8e8e8', formatter: '{value}' },
+            axisLabel: { color: BRAND.white, formatter: '{value}' },
             // align:'left' anchors the title at the axis line so it extends
             // rightward into the plot instead of overflowing the left edge.
-            nameTextStyle: { color: '#dfdecc', align: 'left' },
+            nameTextStyle: { color: BRAND.white, align: 'left' },
           },
           {
             type: 'value',
@@ -95,8 +122,8 @@ export default function InidiviualCharts({ data }) {
             position: 'right',
             nameLocation: 'end',
             nameGap: 14,
-            axisLabel: { color: '#e8e8e8' },
-            nameTextStyle: { color: '#dfdecc', align: 'right' },
+            axisLabel: { color: BRAND.white },
+            nameTextStyle: { color: BRAND.white, align: 'right' },
           },
         ],
         series: [

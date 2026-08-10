@@ -56,6 +56,14 @@ function dateToMs(dateStr) {
   return new Date(`${dateStr}T00:00:00`).getTime();
 }
 
+// Snap a timestamp to its local calendar day (midnight), so a post marker lands
+// on the daily data point rather than partway between days at its exact time.
+function dayFloor(ts) {
+  const d = new Date(ts);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
 function formatDay(ts) {
   return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
@@ -140,8 +148,8 @@ function MetricChart({ title, metricKey, rows, postMarks, color, def }) {
             areaStyle: { color, opacity: 0.1 },
             markPoint: {
               symbol: 'circle',
-              symbolSize: 7,
-              itemStyle: { color: '#0d0d0d', borderColor: color, borderWidth: 1.6 },
+              symbolSize: 8,
+              itemStyle: { color, borderColor: '#0d0d0d', borderWidth: 1 },
               label: { show: false },
               emphasis: {
                 label: {
@@ -221,7 +229,7 @@ export default function OverviewCharts({ data }) {
   const postMarks = allPostDates
     ? Object.entries(allPostDates).map(([code, meta]) => ({
         label: POST_LABELS[code] ?? code,
-        at: meta.postedAt,
+        at: dayFloor(meta.postedAt),
         link: meta.link,
       }))
     : [];
