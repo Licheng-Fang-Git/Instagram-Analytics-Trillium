@@ -8,7 +8,8 @@ import { getInstagramMeta } from '@/app/compare/actions';
 // eyebrow + serif title, a stat grid, the View Growth combo chart, and a
 // two-column row of the "The Post" creative + caption and the Funnel.
 export default async function PostDashboard({ title, slug, month, metrics, chartData, link }) {
-  const eyebrow = `${month} 2026 · ${slug}`;
+  const hasSeries = Array.isArray(chartData) && chartData.length > 0;
+  const eyebrow = `${month ? `${month} 2026 · ` : ''}${slug}`;
   const { image: imageSrc, caption } = await getInstagramMeta(link);
 
   // "Interval Start" looks like "Thu Jul 2 12:06 PM" — split on spaces so the
@@ -46,12 +47,16 @@ export default async function PostDashboard({ title, slug, month, metrics, chart
           <h1 className="m-0 font-serif text-[46px] leading-[1.08] tracking-[-0.01em] text-white">
             {title}
           </h1>
-          <p className="m-0 text-[15px] text-[#e6e6e6]">{`Publication ${month} ${date}, 2026. Post metrics up to ${upToMonth} ${upToDate}, 2026`}</p>
+          <p className="m-0 text-[15px] text-[#e6e6e6]">
+            {hasSeries
+              ? `Publication ${month} ${date}, 2026. Post metrics up to ${upToMonth} ${upToDate}, 2026`
+              : 'Summary added manually. Link a data sheet tab to see the growth charts.'}
+          </p>
         </header>
 
         <MetricCards data={metrics} />
 
-        <IndividualCharts data={chartData} />
+        {hasSeries && <IndividualCharts data={chartData} />}
 
         <div className="grid grid-cols-2 items-start gap-5">
           <div className="flex flex-col gap-4 border border-[#1f1f1f] bg-[#121212] p-6">

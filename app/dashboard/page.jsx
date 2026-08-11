@@ -2,20 +2,7 @@ import Papa from 'papaparse';
 import OverviewCharts from '@/components/OverviewCharts';
 import TopPostsTable from '@/components/TopPostsTable';
 import { getAllPostSummaries } from '@/app/compare/actions';
-
-// Post code -> display title, sidebar slug, and detail-page route, so the
-// Top Posts table can label each row and link it through.
-const POST_META = {
-  interns2026: { title: 'Meet the 2026 Interns', slug: 'interns2026', href: '/meet_2026_interns' },
-  micon2026: { title: 'Mic On', slug: 'micon2026', href: '/mic_on' },
-  nasdaq2026: { title: 'Nasdaq Times Square', slug: 'nasdaq2026', href: '/nasdaq_times_square' },
-  mentors2026: { title: 'Meet the Mentors', slug: 'mentors2026', href: '/meet_the_mentors' },
-  ditl2026: { title: 'Intern Day Reel', slug: 'dit2026', href: '/reel_intern_day' },
-  misconceptions2026: { title: 'Misconceptions Reel', slug: 'misconceptions2026', href: '/misconceptions_reel' },
-  cht2026: { title: 'College Hot Takes', slug: 'cht2026', href: '/college_hot_takes' },
-  nid2026: { title: 'National Intern Day', slug: 'nid2026', href: '/national_intern_day' },
-  poker2026: { title: 'Poker 2026', slug: 'poker2026', href: '/poker2026' },
-};
+import { getAllPosts, postHref } from '@/lib/postsRegistry';
 
 async function getGoogleSheetAsCSV(sheetId, sheetName = 'Meet The Interns') {
   // Construct the export URL pointing to the CSV export endpoint
@@ -54,12 +41,17 @@ export default async function DashboardPage() {
 
   const chartData = parsed.data;
 
-  // Aggregate per-post metrics for the Top Posts table, joined with display
-  // metadata. Rows are sorted by views inside the table component.
-  const summaries = await getAllPostSummaries();
+  // Aggregate per-post metrics for the Top Posts table, joined with registry
+  // metadata (title, slug, and the /{year}/{month}/{slug} link). Rows are
+  // sorted by views inside the table component.
+  const [summaries, registry] = await Promise.all([getAllPostSummaries(), getAllPosts()]);
+  const byCode = new Map(registry.map((p) => [p.code, p]));
   const topPosts = summaries
-    .filter((s) => POST_META[s.code])
-    .map((s) => ({ ...s, ...POST_META[s.code] }));
+    .filter((s) => byCode.has(s.code))
+    .map((s) => {
+      const p = byCode.get(s.code);
+      return { ...s, title: p.title, slug: p.slug, href: postHref(p) };
+    });
 
   return (
     <div className="max-w-[1440px] px-12 pb-[72px] pt-10">

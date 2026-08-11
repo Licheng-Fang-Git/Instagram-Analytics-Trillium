@@ -3,18 +3,44 @@
 import Papa from 'papaparse';
 import { normalizeRows, parseTs } from '@/lib/chartAggregation';
 import { getPostMetrics } from '@/app/content.js';
+import { getAllPosts, getPostByCode, addPost, postHref } from '@/lib/postsRegistry';
 
-const POST_FILES = {
-    ditl2026: 'Day_in_the_Life',
-    interns2026: 'Meet The Interns',
-    mentors2026: 'Meet The Mentors',
-    micon2026: 'Mic-On',
-    nasdaq2026: 'Nasdaq',
-    misconceptions2026: 'Misconceptions-Reel',
-    cht2026: 'College-hot-takes',
-    nid2026: 'National-Intern-Day',
-    poker2026: 'Poker-2026',
-};
+// Registry-derived { code: sheetTab } for every post that carries a time-series
+// sheet tab. This is the single source of truth — new posts added through the
+// form show up here automatically, no code edits.
+async function postFilesMap() {
+    const posts = await getAllPosts();
+    const map = {};
+    for (const p of posts) if (p.sheetTab) map[p.code] = p.sheetTab;
+    return map;
+}
+
+// The compare search list + friendly labels, straight from the registry.
+export async function getPostOptions() {
+    const posts = await getAllPosts();
+    return posts.map((p) => ({ code: p.code, label: p.title }));
+}
+
+// Posts for the sidebar tree: grouped-ready list with year, month, and the
+// detail-page href. Registry-driven, so new posts appear in the nav.
+export async function getNavPosts() {
+    const posts = await getAllPosts();
+    return posts.map((p) => ({
+        slug: p.slug,
+        code: p.code,
+        title: p.title,
+        month: p.month || '',
+        year: p.year || null,
+        href: postHref(p),
+    }));
+}
+
+// Create a post from the Add Post form and return its new href so the client
+// can route straight to the fresh page.
+export async function createPost(input) {
+    const entry = await addPost({ ...input, createdAt: new Date().toISOString() });
+    return { slug: entry.slug, code: entry.code, href: postHref(entry) };
+}
 
 async function getGoogleSheetAsCSV(sheetId, sheetName = 'Meet The Interns') {
     // Construct the export URL pointing to the CSV export endpoint
@@ -70,7 +96,7 @@ export async function getAllPostImpact() {
     const content = parse(await getGoogleSheetAsCSV(SPREADSHEET_ID, 'Content'));
 
     const entries = await Promise.all(
-        Object.entries(POST_FILES).map(async ([code, sheetName]) => {
+        Object.entries(await postFilesMap()).map(async ([code, sheetName]) => {
             const data = parse(await getGoogleSheetAsCSV(SPREADSHEET_ID, sheetName));
             const link = data[0]?.Link?.trim() || null;
             const postedAt = parseD(data[0]?.['Interval Start']);
@@ -101,13 +127,13 @@ export async function getAllPostImpact() {
 }
 
 export async function getPostSeries(postCode) {
-    const fileName = POST_FILES[postCode];
-    if (!fileName) {
-        throw new Error(`Unknown post code: ${postCode}`);
-    }
+    const entry = await getPostByCode(postCode);
+    // Summary-only posts (added via the form without a sheet tab) have no
+    // time-series yet — return empty rows rather than throwing.
+    if (!entry?.sheetTab) return { rows: [] };
 
     const SPREADSHEET_ID = '18wYFbvgo3NtOUvJt-wHQct7Pz18KoRYNaCyAm8t45R4';
-    const fileContent = await getGoogleSheetAsCSV(SPREADSHEET_ID, fileName);
+    const fileContent = await getGoogleSheetAsCSV(SPREADSHEET_ID, entry.sheetTab);
 
     const { data } = Papa.parse(fileContent, {
         header: true,
@@ -124,13 +150,25 @@ export async function getPostSeries(postCode) {
 // rows, the post's Instagram link, and its aggregate metrics (views/reach/likes/
 // etc.) for the slot cards and the head-to-head table.
 export async function getPostSummary(postCode) {
-    const fileName = POST_FILES[postCode];
-    if (!fileName) {
+    const entry = await getPostByCode(postCode);
+    if (!entry) {
         throw new Error(`Unknown post code: ${postCode}`);
     }
 
+    // Summary-only post (added via the form without a sheet tab): no time-series
+    // or ad data yet, but its form-entered metrics still power the cards + table.
+    if (!entry.sheetTab) {
+        return {
+            rows: [],
+            link: entry.link || null,
+            metrics: entry.metrics || {},
+            adWindows: [],
+            adViews: [],
+        };
+    }
+
     const SPREADSHEET_ID = '18wYFbvgo3NtOUvJt-wHQct7Pz18KoRYNaCyAm8t45R4';
-    const fileContent = await getGoogleSheetAsCSV(SPREADSHEET_ID, fileName);
+    const fileContent = await getGoogleSheetAsCSV(SPREADSHEET_ID, entry.sheetTab);
 
     const { data } = Papa.parse(fileContent, {
         header: true,
@@ -197,7 +235,7 @@ export async function getAllPostSummaries() {
     const num = (v) => Number(v) || 0;
 
     const entries = await Promise.all(
-        Object.entries(POST_FILES).map(async ([code, sheetName]) => {
+        Object.entries(await postFilesMap()).map(async ([code, sheetName]) => {
             const data = parse(await getGoogleSheetAsCSV(SPREADSHEET_ID, sheetName));
             const link = data[0]?.Link?.trim() || null;
             const row = link ? content.find((r) => r['Permalink'] === link) : null;
@@ -337,7 +375,7 @@ export async function getAllTimingSeries() {
     const SPREADSHEET_ID = '18wYFbvgo3NtOUvJt-wHQct7Pz18KoRYNaCyAm8t45R4';
 
     const entries = await Promise.all(
-        Object.entries(POST_FILES).map(async ([code, sheetName]) => {
+        Object.entries(await postFilesMap()).map(async ([code, sheetName]) => {
             const csv = await getGoogleSheetAsCSV(SPREADSHEET_ID, sheetName);
             const data = csv
                 ? Papa.parse(csv, { header: true, dynamicTyping: true, skipEmptyLines: true }).data
@@ -357,7 +395,7 @@ export async function getAllPostDates() {
     const SPREADSHEET_ID = '18wYFbvgo3NtOUvJt-wHQct7Pz18KoRYNaCyAm8t45R4';
 
     const entries = await Promise.all(
-        Object.entries(POST_FILES).map(async([code, sheetName]) => {
+        Object.entries(await postFilesMap()).map(async([code, sheetName]) => {
             const fileContent = await getGoogleSheetAsCSV(SPREADSHEET_ID, sheetName);
             const { data } = Papa.parse(fileContent, {
                 header: true,

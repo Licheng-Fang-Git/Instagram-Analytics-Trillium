@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import * as echarts from 'echarts';
-import { getPostSummary, getAllPostDates } from '@/app/compare/actions';
+import { getPostSummary, getAllPostDates, getPostOptions } from '@/app/compare/actions';
 import {
   interpolateValue,
   formatAxisDateTime,
@@ -12,7 +12,9 @@ import {
 } from '@/lib/chartAggregation';
 import { BRAND, brandTooltip, valueAxis, axisLabel, axisLine, seriesColor } from '@/lib/chartTheme';
 
-const POST_OPTIONS = [
+// Fallback list shown until the live registry loads (getPostOptions). The
+// registry is the real source of truth, so newly-added posts appear here too.
+const POST_OPTIONS_FALLBACK = [
   { code: 'interns2026', label: 'Meet the 2026 Interns' },
   { code: 'micon2026', label: 'Mic On' },
   { code: 'nasdaq2026', label: 'Nasdaq Times Square' },
@@ -27,8 +29,8 @@ const POST_OPTIONS = [
 function fmt(n) {
   return (Number(n) || 0).toLocaleString('en-US');
 }
-function labelFor(code) {
-  return POST_OPTIONS.find((p) => p.code === code)?.label || code;
+function labelFor(code, options) {
+  return options.find((p) => p.code === code)?.label || code;
 }
 
 // Minutes per bucket, for the elapsed-time ("aligned") x-axis labels.
@@ -78,11 +80,11 @@ function seriesForBucket(rows, bucket) {
 
 // For a given post's line, every OTHER post that went up within its visible
 // window becomes a filled "X was posted here" marker sitting on this line.
-function getCrossPostMarks(slot, allPostDates, ownPoints, color) {
+function getCrossPostMarks(slot, allPostDates, ownPoints, color, postOptions) {
   if (!allPostDates || !ownPoints.length) return [];
   const ownStart = ownPoints[0][0];
   const ownEnd = ownPoints[ownPoints.length - 1][0];
-  return POST_OPTIONS.filter((opt) => opt.code !== slot.selected.code)
+  return postOptions.filter((opt) => opt.code !== slot.selected.code)
     .map((opt) => ({ opt, meta: allPostDates[opt.code] }))
     .filter(({ meta }) => meta && meta.postedAt > ownStart && meta.postedAt <= ownEnd)
     .map(({ opt, meta }) => ({
@@ -149,11 +151,11 @@ function getAdMarksAligned(adWindows, points) {
 // Same "other post was published here" markers, but for a category (elapsed)
 // x-axis: each other post's publish time maps to the category index of the
 // point that first reaches it, so the marker sits on the line.
-function getCrossPostMarksAligned(slot, allPostDates, points, color) {
+function getCrossPostMarksAligned(slot, allPostDates, points, color, postOptions) {
   if (!allPostDates || !points.length) return [];
   const lo = points[0][0];
   const hi = points[points.length - 1][0];
-  return POST_OPTIONS.filter((opt) => opt.code !== slot.selected.code)
+  return postOptions.filter((opt) => opt.code !== slot.selected.code)
     .map((opt) => ({ opt, meta: allPostDates[opt.code] }))
     .filter(({ meta }) => meta && meta.postedAt > lo && meta.postedAt <= hi)
     .map(({ opt, meta }) => {
@@ -193,13 +195,13 @@ function markPoint(data) {
 }
 
 // Typeahead search for one slot: type part of a code/name, pick from the list.
-function PostSearchBox({ index, query, onQueryChange, onSelect, excludeCodes, isSelected, onRemove, canRemove, color }) {
+function PostSearchBox({ index, query, onQueryChange, onSelect, excludeCodes, isSelected, onRemove, canRemove, color, options }) {
   const [open, setOpen] = useState(false);
 
   // Token-based match against code + label, so multi-word queries in any order
   // work — e.g. "interns 2026" matches "Meet the 2026 Interns" / interns2026.
   const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const matches = POST_OPTIONS.filter((opt) => {
+  const matches = options.filter((opt) => {
     if (excludeCodes.includes(opt.code)) return false;
     const hay = `${opt.code} ${opt.label}`.toLowerCase();
     return tokens.every((t) => hay.includes(t));
@@ -279,15 +281,22 @@ export default function ComparePost() {
   const [slots, setSlots] = useState([{ id: 0, ...EMPTY_SLOT }]);
   const [error, setError] = useState(null);
   const [allPostDates, setAllPostDates] = useState(null);
+  const [postOptions, setPostOptions] = useState(POST_OPTIONS_FALLBACK);
   const [bucket, setBucket] = useState('none');
 
   useEffect(() => {
     getAllPostDates().then(setAllPostDates).catch(() => setAllPostDates({}));
+    // Live post list from the registry, so posts added via the form are searchable.
+    getPostOptions()
+      .then((opts) => {
+        if (Array.isArray(opts) && opts.length) setPostOptions(opts);
+      })
+      .catch(() => {});
   }, []);
 
   function addSlot() {
     setSlots((prev) => {
-      if (prev.length >= POST_OPTIONS.length) return prev;
+      if (prev.length >= postOptions.length) return prev;
       const id = nextSlotId.current++;
       return [...prev, { id, ...EMPTY_SLOT }];
     });
@@ -409,11 +418,11 @@ export default function ComparePost() {
         markPoint: markPoint(
           categoryMode
             ? [
-                ...getCrossPostMarksAligned(p.slot, allPostDates, p[key], p.color),
+                ...getCrossPostMarksAligned(p.slot, allPostDates, p[key], p.color, postOptions),
                 ...getAdMarksAligned(p.slot.series.adWindows, p[key]),
               ]
             : [
-                ...getCrossPostMarks(p.slot, allPostDates, p[key], p.color),
+                ...getCrossPostMarks(p.slot, allPostDates, p[key], p.color, postOptions),
                 ...getAdMarks(p.slot.series.adWindows, p[key]),
               ]
         ),
@@ -457,11 +466,11 @@ export default function ComparePost() {
         if (dayBucket) pts = pts.map(([t, v]) => [dayFloor(t), v]);
         const previewMax = Math.max(0, ...pts.map((d) => Number(d[1]) || 0));
         chart.setOption({
-          yAxis: [{ name: previewMax > currentMax ? labelFor(code) : currentName }],
+          yAxis: [{ name: previewMax > currentMax ? labelFor(code, postOptions) : currentName }],
           series: [
             {
               id: 'overlay',
-              name: labelFor(code) + ' · preview',
+              name: labelFor(code, postOptions) + ' · preview',
               type: 'line',
               data: lineData(pts),
               smooth: true,
@@ -588,7 +597,7 @@ export default function ComparePost() {
     }
 
     return () => cleanups.forEach((fn) => fn());
-  }, [slots, allPostDates, bucket]);
+  }, [slots, allPostDates, bucket, postOptions]);
 
   useEffect(() => {
     return () => {
@@ -626,6 +635,7 @@ export default function ComparePost() {
             index={index}
             query={slot.query}
             color={seriesColor(index)}
+            options={postOptions}
             onQueryChange={(v) => handleQueryChange(index, v)}
             onSelect={(opt) => handleSelect(index, opt)}
             excludeCodes={[]}

@@ -1,35 +1,50 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import AddPostModal from '@/components/AddPostModal';
+import { getNavPosts } from '@/app/compare/actions';
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard' },
   { href: '/compare', label: 'Compare Posts' },
 ];
 
-const JUNE_POSTS = [
-  { href: '/meet_2026_interns', label: 'Meet the 2026 Interns', slug: 'interns2026' },
-  { href: '/mic_on', label: 'Mic On', slug: 'micon2026' },
+// Month order within a year (newest-first display).
+const MONTH_ORDER = [
+  'December', 'November', 'October', 'September', 'August', 'July',
+  'June', 'May', 'April', 'March', 'February', 'January',
 ];
 
-const JULY_POSTS = [
-  { href: '/nasdaq_times_square', label: 'Nasdaq Times Square', slug: 'nasdaq2026' },
-  { href: '/meet_the_mentors', label: 'Meet the Mentors', slug: 'mentors2026' },
-  { href: '/reel_intern_day', label: 'Intern Day Reel', slug: 'dit2026' },
-  { href: '/misconceptions_reel', label: 'Misconceptions Reel', slug: 'misconceptions2026' },
-  { href: '/college_hot_takes', label: 'College Hot Takes', slug: 'cht2026' },
-  { href: '/national_intern_day', label: 'National Intern Day', slug: 'nid2026' },
-  { href: '/poker2026', label: 'Poker 2026', slug: 'poker2026' },
-];
-
-// Months newest-first, nested under the 2026 year.
-const MONTHS = [
-  { key: 'july', label: 'July 2026', posts: JULY_POSTS },
-  { key: 'june', label: 'June 2026', posts: JUNE_POSTS },
-];
-const YEAR_KEY = '2026';
+// Turn the flat registry list into a year -> months -> posts tree, newest year
+// and month first, so the sidebar mirrors the app/ folder organization.
+function buildTree(posts) {
+  const byYear = new Map();
+  for (const p of posts) {
+    const year = p.year || 'Undated';
+    const month = p.month || 'Other';
+    if (!byYear.has(year)) byYear.set(year, new Map());
+    const months = byYear.get(year);
+    if (!months.has(month)) months.set(month, []);
+    months.get(month).push({ href: p.href, label: p.title, slug: p.slug });
+  }
+  const years = [...byYear.keys()].sort((a, b) => (Number(b) || 0) - (Number(a) || 0));
+  return years.map((year) => {
+    const months = byYear.get(year);
+    const orderedMonths = [...months.keys()].sort(
+      (a, b) => MONTH_ORDER.indexOf(a) - MONTH_ORDER.indexOf(b)
+    );
+    return {
+      year: String(year),
+      months: orderedMonths.map((m) => ({
+        key: `${year}-${m}`,
+        label: `${m} ${year}`,
+        posts: months.get(m),
+      })),
+    };
+  });
+}
 
 // Top-level pill button. Active = solid accent fill + black text; hover =
 // dark-olive wash + accent text. Colors use `!` because the global `a` rule in
@@ -115,12 +130,28 @@ function MonthSection({ label, posts, isOpen, onToggle, pathname }) {
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const [openTree, setOpenTree] = useState({ [YEAR_KEY]: true, july: true, june: true });
+  const [tree, setTree] = useState([]);
+  const [openTree, setOpenTree] = useState({});
+
+  // Load the post tree from the registry; default everything open on first load.
+  useEffect(() => {
+    getNavPosts()
+      .then((posts) => {
+        const t = buildTree(posts);
+        setTree(t);
+        const open = {};
+        t.forEach((y) => {
+          open[y.year] = true;
+          y.months.forEach((m) => (open[m.key] = true));
+        });
+        setOpenTree(open);
+      })
+      .catch(() => setTree([]));
+  }, []);
 
   const toggle = (key) => setOpenTree((prev) => ({ ...prev, [key]: !prev[key] }));
   const dashboardActive = pathname === '/dashboard' || pathname === '/';
   const isActive = (href) => (href === '/dashboard' ? dashboardActive : pathname === href);
-  const yearOpen = openTree[YEAR_KEY];
 
   return (
     <aside className="sticky top-0 hidden h-screen w-[250px] flex-none flex-col overflow-y-auto border-r border-[#151515] bg-[#0e0e0e] pb-3 md:flex">
@@ -142,6 +173,11 @@ export default function Sidebar() {
         </span>
       </div>
 
+      {/* Add Post */}
+      <div className="px-3 pt-3">
+        <AddPostModal />
+      </div>
+
       {/* Nav */}
       <nav className="flex flex-col gap-0.5 px-2 pt-3">
         {NAV_ITEMS.map((item) => (
@@ -149,26 +185,30 @@ export default function Sidebar() {
         ))}
       </nav>
 
-      {/* Year → month → post tree */}
+      {/* Year → month → post tree (registry-driven) */}
       <div className="flex flex-col gap-0.5 px-2 pt-3">
-        <button type="button" onClick={() => toggle(YEAR_KEY)} className={`${navBtn(false)} gap-2`}>
-          <span className="flex-1 text-left">2026</span>
-          <Chevron open={yearOpen} />
-        </button>
-        {yearOpen && (
-          <div className="flex flex-col gap-0.5">
-            {MONTHS.map((m) => (
-              <MonthSection
-                key={m.key}
-                label={m.label}
-                posts={m.posts}
-                isOpen={openTree[m.key]}
-                onToggle={() => toggle(m.key)}
-                pathname={pathname}
-              />
-            ))}
+        {tree.map((y) => (
+          <div key={y.year} className="flex flex-col gap-0.5">
+            <button type="button" onClick={() => toggle(y.year)} className={`${navBtn(false)} gap-2`}>
+              <span className="flex-1 text-left">{y.year}</span>
+              <Chevron open={openTree[y.year]} />
+            </button>
+            {openTree[y.year] && (
+              <div className="flex flex-col gap-0.5">
+                {y.months.map((m) => (
+                  <MonthSection
+                    key={m.key}
+                    label={m.label}
+                    posts={m.posts}
+                    isOpen={openTree[m.key]}
+                    onToggle={() => toggle(m.key)}
+                    pathname={pathname}
+                  />
+                ))}
+              </div>
+            )}
           </div>
-        )}
+        ))}
       </div>
     </aside>
   );
