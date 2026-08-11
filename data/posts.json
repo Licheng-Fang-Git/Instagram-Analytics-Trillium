@@ -80,15 +80,6 @@
     "datePosted": "2026-07-09",
     "link": "https://www.instagram.com/reel/Dak7SEeDDaP/",
     "sheetTab": "SEC-Coach",
-    "metrics": {
-      "views": 0,
-      "reach": 0,
-      "likes": 0,
-      "shares": 0,
-      "follows": 0,
-      "comments": 0,
-      "saves": 0
-    },
     "createdAt": "2026-08-11T19:32:09.565Z"
   },
   {
@@ -100,15 +91,61 @@
     "datePosted": "2026-07-14",
     "link": "https://www.instagram.com/p/Dax3_9umvML/",
     "sheetTab": "Before the desk",
-    "metrics": {
-      "views": 0,
-      "reach": 0,
-      "likes": 0,
-      "shares": 0,
-      "follows": 0,
-      "comments": 0,
-      "saves": 0
-    },
     "createdAt": "2026-08-11T19:51:04.712Z"
+  },
+  {
+    "code": "bloomberg_2026",
+    "slug": "bloomberg_2026",
+    "title": "Bloomberg 2026",
+    "month": "July",
+    "year": 2026,
+    "datePosted": "2026-07-15",
+    "link": "https://www.instagram.com/p/Da0c2Q5FiXt/",
+    "sheetTab": "Bloomberg2026",
+    "createdAt": "2026-08-11T20:08:34.525Z"
+  },
+  {
+    "code": "cboe_visit_2026",
+    "slug": "cboe_visit_2026",
+    "title": "Cboe Visit 2026",
+    "month": "July",
+    "year": 2026,
+    "datePosted": "2026-07-16",
+    "link": "https://www.instagram.com/p/Da3ITjIke2m/",
+    "sheetTab": "Cboe-Visit2026",
+    "createdAt": "2026-08-11T20:11:36.733Z"
+  },
+  {
+    "code": "chi_happy_hour_2026",
+    "slug": "chi_happy_hour_2026",
+    "title": "CHI Happy Hour 2026",
+    "month": "July",
+    "year": 2026,
+    "datePosted": "2026-07-21",
+    "link": "https://www.instagram.com/p/DbDzS1SEVmP/",
+    "sheetTab": "CHI-Happy-Hour-26",
+    "createdAt": "2026-08-11T20:24:23.345Z"
+  },
+  {
+    "code": "miami_bowling_2026",
+    "slug": "miami_bowling_2026",
+    "title": "Miami Bowling 2026",
+    "month": "July",
+    "year": 2026,
+    "datePosted": "2026-07-24",
+    "link": "https://www.instagram.com/p/DbLn6bFFXwP/",
+    "sheetTab": "Miami-Bowling-2026",
+    "createdAt": "2026-08-11T20:28:21.439Z"
+  },
+  {
+    "code": "nasdaq_marketsite_2026",
+    "slug": "nasdaq_marketsite_2026",
+    "title": "Nasdaq MarketSite 2026",
+    "month": "July",
+    "year": 2026,
+    "datePosted": "2026-07-24",
+    "link": "https://www.instagram.com/p/DbMFbtDkcpy/",
+    "sheetTab": "Nasdaq-MarketSite",
+    "createdAt": "2026-08-11T20:34:19.944Z"
   }
 ]
