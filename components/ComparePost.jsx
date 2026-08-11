@@ -549,14 +549,13 @@ export default function ComparePost() {
         .map((p) => ({
           name: p.name,
           type: 'line',
-          smooth: true,
-          showSymbol: true,
+          smooth: false,
+          showSymbol: false,
           symbol: 'circle',
           symbolSize: 6,
           data: p.slot.series.adViews.map((a) => [dayFloor(a.t), a.views]),
           lineStyle: { width: 2.25, color: '#ff6549' },
           itemStyle: { color: '#ff6549' },
-          areaStyle: { color: 'rgba(255,101,73,0.08)' },
         }));
       adChart.setOption(
         {
@@ -636,20 +635,6 @@ export default function ComparePost() {
         ))}
       </div>
 
-      {hasSelection && (
-        <div className="flex flex-wrap items-center gap-5 text-[11px] text-[#a8a8a8]">
-          <span className="flex items-center gap-1.5">
-            <span className="block h-2.5 w-2.5 rounded-full bg-[#ebffa8]" /> Other posts published (click to preview)
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="block h-2.5 w-2.5 rounded-full bg-[#ff6549]" /> Boost started
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="block h-2.5 w-2.5 rounded-full border-2 border-[#ff6549] bg-[#0d0d0d]" /> Boost ended
-          </span>
-        </div>
-      )}
-
       {error && <p className="text-sm text-[#ff6549]">{error}</p>}
 
       {/* Bucket controls */}
@@ -680,28 +665,18 @@ export default function ComparePost() {
           Rows combine into buckets of this size, up to the data&apos;s own granularity.
         </span>
       </div>
-
-      {/* Bucket summary — the number each post "got to" at this bucket */}
-      {hasSelection && bucketSummaries.length > 0 && (
-        <div className="flex flex-col gap-2.5 border border-[#1f1f1f] bg-[#121212] px-6 py-4">
-          {bucketSummaries.map((s) => (
-            <div key={s.name} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
-              <span className="block h-2.5 w-2.5 flex-none" style={{ background: s.color }} />
-              <span className="text-white">{s.name}</span>
-              <span className="text-[#a8a8a8]">got to</span>
-              <span className="font-mono text-white">{fmt(s.total)} views</span>
-              <span className="text-[#a8a8a8]">
-                across {s.count} {s.count === 1 ? 'bucket' : 'buckets'} of {bucketLabel}
-              </span>
-              {s.peak && (
-                <span className="text-[#a8a8a8]">
-                  · biggest surge{' '}
-                  <span className="font-mono text-[#ebffa8]">{fmt(s.peak.v)}</span> at{' '}
-                  {formatAxisDateTimeShort(s.peak.t)}
-                </span>
-              )}
-            </div>
-          ))}
+      {/* Points Legend */}
+      {hasSelection && (
+        <div className="flex flex-wrap items-center gap-5 text-[11px] text-[#a8a8a8]">
+          <span className="flex items-center gap-1.5">
+            <span className="block h-2.5 w-2.5 rounded-full bg-[#ebffa8]" /> Other posts published (click to preview)
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="block h-2.5 w-2.5 rounded-full bg-[#ff6549]" /> Boost started
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="block h-2.5 w-2.5 rounded-full border-2 border-[#ff6549] bg-[#0d0d0d]" /> Boost ended
+          </span>
         </div>
       )}
 
