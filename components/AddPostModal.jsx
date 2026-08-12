@@ -30,6 +30,7 @@ export default function AddPostModal() {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [form, setForm] = useState(EMPTY);
+  const [file, setFile] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -53,10 +54,21 @@ export default function AddPostModal() {
   function close() {
     setOpen(false);
     setForm(EMPTY);
+    setFile(null);
     setError('');
   }
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  // Read the uploaded spreadsheet as base64 (server parses it with xlsx).
+  function fileToBase64(f) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+      reader.onerror = reject;
+      reader.readAsDataURL(f);
+    });
+  }
 
   async function handleSave() {
     if (!form.title.trim()) {
@@ -66,11 +78,13 @@ export default function AddPostModal() {
     setSaving(true);
     setError('');
     try {
+      const excelBase64 = file ? await fileToBase64(file) : undefined;
       const { href } = await createPost({
         title: form.title.trim(),
         link: form.link,
         datePosted: form.datePosted,
         sheetTab: form.sheetTab,
+        excelBase64,
       });
       // Full-page load to the new post's page (organized under /{year}/{month}/…).
       // A hard reload re-runs the sidebar's registry fetch, so the new post shows
@@ -146,19 +160,42 @@ export default function AddPostModal() {
                       onChange={set('datePosted')}
                     />
                   </Field>
-                  <Field label="Data Sheet Tab (optional)">
+                  <Field label="Sheet Tab Name (optional)">
                     <input
                       className={inputClass}
                       type="text"
-                      placeholder="Google Sheet tab name"
+                      placeholder="Defaults to the post name"
                       value={form.sheetTab}
                       onChange={set('sheetTab')}
                     />
                   </Field>
                 </div>
+
+                <Field label="Upload Data (Excel / CSV)">
+                  <label
+                    className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-dashed px-4 py-3 text-[14px] transition ${
+                      file ? 'border-[#ebffa8] text-white' : 'border-[#2a2a2a] text-[#8d8d8d] hover:border-[#3a3a3a]'
+                    }`}
+                  >
+                    <span className="truncate">
+                      {file ? file.name : 'Choose the Instagram interval export…'}
+                    </span>
+                    <span className="flex-none rounded-lg bg-[#1c1c1c] px-3 py-1 text-[12px] font-semibold text-[#e8e8e8]">
+                      Browse
+                    </span>
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      className="hidden"
+                      onChange={(e) => setFile(e.target.files?.[0] || null)}
+                    />
+                  </label>
+                </Field>
+
                 <p className="-mt-2 text-[12.5px] leading-snug text-[#7d7d7d]">
-                  Link a Google Sheet tab (the Instagram interval export) to power the growth charts.
-                  Leave it blank to save a summary-only post now and add the data later.
+                  Saving creates a Google Sheet tab for this post — the Instagram link goes in the Link
+                  column, and any uploaded data points are written into the tab (columns: Interval
+                  Start/End, Interval Length, Views in Interval, Cumulative Views).
                 </p>
 
                 {error && <p className="text-[13px] text-[#ff6549]">{error}</p>}

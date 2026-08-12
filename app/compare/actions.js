@@ -3,7 +3,8 @@
 import Papa from 'papaparse';
 import { normalizeRows, parseTs } from '@/lib/chartAggregation';
 import { getPostMetrics } from '@/app/content.js';
-import { getAllPosts, getPostByCode, addPost, postHref } from '@/lib/postsRegistry';
+import { getAllPosts, getPostByCode, addPost, postHref, setPostSheetTab } from '@/lib/postsRegistry';
+import { sheetsConfigured, createPostTab } from '@/lib/googleSheets';
 
 // Registry-derived { code: sheetTab } for every post that carries a time-series
 // sheet tab. This is the single source of truth — new posts added through the
@@ -35,10 +36,43 @@ export async function getNavPosts() {
     }));
 }
 
-// Create a post from the Add Post form and return its new href so the client
-// can route straight to the fresh page.
+// Parse an uploaded Excel/CSV (base64) into an array of row objects keyed by
+// header. Loaded lazily so the xlsx parser isn't bundled unless a file is sent.
+async function parseSpreadsheetBase64(b64) {
+    if (!b64) return [];
+    try {
+        const XLSX = await import('xlsx');
+        const buf = Buffer.from(b64, 'base64');
+        const wb = XLSX.read(buf, { type: 'buffer' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        return ws ? XLSX.utils.sheet_to_json(ws, { defval: '' }) : [];
+    } catch (e) {
+        console.error('Failed to parse uploaded spreadsheet:', e);
+        return [];
+    }
+}
+
+// Create a post from the Add Post form. When Google Sheets is configured, this
+// also AUTO-CREATES a tab for the post: it writes the Instagram link into the
+// Link column and, if an Excel/CSV was uploaded, its data points into the tab.
+// Returns the new post's href so the client can route straight to its page.
 export async function createPost(input) {
     const entry = await addPost({ ...input, createdAt: new Date().toISOString() });
+
+    // Auto-provision the post's Google Sheet tab (link + uploaded data points).
+    if (sheetsConfigured()) {
+        const tabName = (input.sheetTab || '').trim() || entry.slug;
+        try {
+            const rows = await parseSpreadsheetBase64(input.excelBase64);
+            await createPostTab({ tabName, link: input.link, rows });
+            // Point the registry at the tab so the app reads the data back.
+            if (entry.sheetTab !== tabName) await setPostSheetTab(entry.slug, tabName);
+            entry.sheetTab = tabName;
+        } catch (e) {
+            console.error('Google Sheet tab creation failed:', e);
+        }
+    }
+
     return { slug: entry.slug, code: entry.code, href: postHref(entry) };
 }
 
