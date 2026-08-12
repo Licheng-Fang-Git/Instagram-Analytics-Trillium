@@ -408,7 +408,7 @@ export default function ComparePost() {
         name: p.name,
         type: 'line',
         smooth: true,
-        showSymbol: categoryMode ? maxLen <= 60 : false,
+        showSymbol: false,
         symbol: 'circle',
         symbolSize: 5,
         connectNulls: true,
@@ -465,27 +465,78 @@ export default function ComparePost() {
         let pts = seriesForBucket(s.rows, bucket)[key];
         if (dayBucket) pts = pts.map(([t, v]) => [dayFloor(t), v]);
         const previewMax = Math.max(0, ...pts.map((d) => Number(d[1]) || 0));
-        chart.setOption({
+
+        // On the elapsed ("time since post") axis, DON'T align the clicked post
+        // to +15m — offset its line so it begins where that post was published on
+        // the main post's timeline (its cross-post marker), then unfolds from
+        // there. If the clicked post's curve runs past the main post's window, we
+        // EXTEND the elapsed axis so the whole clicked curve stays visible. On the
+        // absolute (24h) axis it already sits at its real dates.
+        let data;
+        let xCats = null;
+        if (categoryMode) {
+          const mainPoints = perSlot[0]?.[key] || [];
+          const postedAt = allPostDates?.[code]?.postedAt;
+          let idxMarker = 0;
+          if (Number.isFinite(postedAt) && mainPoints.length) {
+            idxMarker = mainPoints.findIndex((pt) => pt[0] >= postedAt);
+            if (idxMarker === -1) idxMarker = mainPoints.length;
+          }
+          const totalLen = Math.max(maxLen, idxMarker + pts.length);
+          data = new Array(totalLen).fill(null);
+          for (let j = 0; j < pts.length && idxMarker + j < totalLen; j++) {
+            data[idxMarker + j] = Number(pts[j][1]) || 0;
+          }
+          if (totalLen > maxLen) {
+            // Continue the elapsed labels past the main window using the clicked
+            // post's own elapsed time added to when it was published.
+            const mainT0 = perSlot[0]?.t0 ?? 0;
+            const markerMin = Number.isFinite(postedAt) ? Math.max(0, (postedAt - mainT0) / 60000) : 0;
+            const clickedT0 = s.rows?.[0]?.tStart ?? pts[0]?.[0] ?? 0;
+            xCats = categories.slice();
+            for (let kk = maxLen; kk < totalLen; kk++) {
+              const clk = pts[kk - idxMarker];
+              const clickedMin = clk ? Math.max(0, (clk[0] - clickedT0) / 60000) : 0;
+              xCats[kk] = '+' + elapsedLabel(Math.round(markerMin + clickedMin));
+            }
+          }
+        } else {
+          data = pts;
+        }
+
+        const previewName = labelFor(code, postOptions) + ' · clicked';
+        const opt = {
+          legend: { data: [...perSlot.map((p) => p.name), previewName] },
           yAxis: [{ name: previewMax > currentMax ? labelFor(code, postOptions) : currentName }],
           series: [
             {
               id: 'overlay',
-              name: labelFor(code, postOptions) + ' · preview',
+              name: previewName,
               type: 'line',
-              data: lineData(pts),
+              data,
               smooth: true,
               showSymbol: false,
+              connectNulls: false,
               silent: true,
               z: 0,
-              lineStyle: { width: 2, color: 'rgba(217,212,203,0.8)' },
+              lineStyle: { width: 2, color: 'rgba(217,212,203,0.85)' },
+              itemStyle: { color: 'rgba(217,212,203,0.85)' },
             },
           ],
-        });
+        };
+        if (xCats) opt.xAxis = [{ data: xCats }];
+        chart.setOption(opt);
       };
       const hidePreview = () => {
         hoveredRef.current = null;
         overlayCodeRef.current[key] = null;
-        chart.setOption({ yAxis: [{ name: currentName }], series: [{ id: 'overlay', data: [] }] });
+        const opt = {
+          legend: { data: perSlot.map((p) => p.name) },
+          yAxis: [{ name: currentName }],
+          series: [{ id: 'overlay', data: [] }],
+        };
+        if (categoryMode) opt.xAxis = [{ data: categories }]; // restore original length
+        chart.setOption(opt);
       };
 
       const xAxis = categoryMode

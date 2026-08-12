@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useRouter } from 'next/navigation';
 import { createPost } from '@/app/compare/actions';
 
 const EMPTY = {
@@ -28,7 +27,6 @@ function Field({ label, children }) {
 }
 
 export default function AddPostModal() {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [form, setForm] = useState(EMPTY);
@@ -74,9 +72,10 @@ export default function AddPostModal() {
         datePosted: form.datePosted,
         sheetTab: form.sheetTab,
       });
-      close();
-      // Go straight to the new post's page (organized under /{year}/{month}/…).
-      router.push(href);
+      // Full-page load to the new post's page (organized under /{year}/{month}/…).
+      // A hard reload re-runs the sidebar's registry fetch, so the new post shows
+      // up in the nav tree — a client-side push would leave the sidebar stale.
+      window.location.assign(href);
     } catch (e) {
       setError('Could not save the post. Please try again.');
       setSaving(false);
@@ -117,7 +116,7 @@ export default function AddPostModal() {
 
             <div className="max-h-[calc(100vh-180px)] overflow-y-auto px-7 pb-7">
               <div className="flex flex-col gap-5">
-                <Field label="Instagram Link (optional)">
+                <Field label="Instagram Link">
                   <input
                     className={inputClass}
                     type="url"
