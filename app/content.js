@@ -34,12 +34,13 @@ export async function getPostMetrics({ post_link } = {}) {
         header: true,
         dynamicTyping: true,
         skipEmptyLines: true,
+        // The Content tab's headers carry trailing spaces ("Permalink ", "Views "
+        // …); trim them so row['Permalink'] / row['Views'] etc. resolve.
+        transformHeader: (h) => h.trim(),
     });
 
-    const postLinkLength = post_link.length;
-    const match = (data || []).find(
-        (row) => row['Permalink'] === post_link.substring(0, postLinkLength)
-    );
+    const target = String(post_link).trim();
+    const match = (data || []).find((row) => String(row['Permalink'] ?? '').trim() === target);
     if (!match) return { ...EMPTY_METRICS };
 
     return {

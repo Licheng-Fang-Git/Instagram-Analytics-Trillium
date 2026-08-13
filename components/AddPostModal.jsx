@@ -8,14 +8,13 @@ const EMPTY = {
   link: '',
   title: '',
   datePosted: '',
-  sheetTab: '',
 };
 
 // A soft, rounded input in the Apple style: generous padding, subtle border,
 // a calm focus ring — consistent everywhere in the form.
 const inputClass =
   'w-full rounded-xl border border-[#2a2a2a] bg-[#0d0d0d] px-4 py-3 text-[15px] text-white placeholder:text-[#6b6b6b] outline-none transition focus:border-[#ebffa8] focus:ring-2 focus:ring-[#ebffa8]/25';
-const labelClass = 'mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em] text-[#9a9a9a]';
+const labelClass = 'mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em] text-white';
 
 function Field({ label, children }) {
   return (
@@ -30,7 +29,6 @@ export default function AddPostModal() {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [form, setForm] = useState(EMPTY);
-  const [file, setFile] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -54,21 +52,10 @@ export default function AddPostModal() {
   function close() {
     setOpen(false);
     setForm(EMPTY);
-    setFile(null);
     setError('');
   }
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
-
-  // Read the uploaded spreadsheet as base64 (server parses it with xlsx).
-  function fileToBase64(f) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
-      reader.onerror = reject;
-      reader.readAsDataURL(f);
-    });
-  }
 
   async function handleSave() {
     if (!form.title.trim()) {
@@ -78,13 +65,10 @@ export default function AddPostModal() {
     setSaving(true);
     setError('');
     try {
-      const excelBase64 = file ? await fileToBase64(file) : undefined;
       const { href } = await createPost({
         title: form.title.trim(),
         link: form.link,
         datePosted: form.datePosted,
-        sheetTab: form.sheetTab,
-        excelBase64,
       });
       // Full-page load to the new post's page (organized under /{year}/{month}/…).
       // A hard reload re-runs the sidebar's registry fetch, so the new post shows
@@ -151,51 +135,18 @@ export default function AddPostModal() {
                   />
                 </Field>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <Field label="Date Posted">
-                    <input
-                      className={`${inputClass} [color-scheme:dark]`}
-                      type="date"
-                      value={form.datePosted}
-                      onChange={set('datePosted')}
-                    />
-                  </Field>
-                  <Field label="Sheet Tab Name (optional)">
-                    <input
-                      className={inputClass}
-                      type="text"
-                      placeholder="Defaults to the post name"
-                      value={form.sheetTab}
-                      onChange={set('sheetTab')}
-                    />
-                  </Field>
-                </div>
-
-                <Field label="Upload Data (Excel / CSV)">
-                  <label
-                    className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-dashed px-4 py-3 text-[14px] transition ${
-                      file ? 'border-[#ebffa8] text-white' : 'border-[#2a2a2a] text-[#8d8d8d] hover:border-[#3a3a3a]'
-                    }`}
-                  >
-                    <span className="truncate">
-                      {file ? file.name : 'Choose the Instagram interval export…'}
-                    </span>
-                    <span className="flex-none rounded-lg bg-[#1c1c1c] px-3 py-1 text-[12px] font-semibold text-[#e8e8e8]">
-                      Browse
-                    </span>
-                    <input
-                      type="file"
-                      accept=".xlsx,.xls,.csv"
-                      className="hidden"
-                      onChange={(e) => setFile(e.target.files?.[0] || null)}
-                    />
-                  </label>
+                <Field label="Date Posted">
+                  <input
+                    className={`${inputClass} [color-scheme:dark]`}
+                    type="date"
+                    value={form.datePosted}
+                    onChange={set('datePosted')}
+                  />
                 </Field>
 
-                <p className="-mt-2 text-[12.5px] leading-snug text-[#7d7d7d]">
-                  Saving creates a Google Sheet tab for this post — the Instagram link goes in the Link
-                  column, and any uploaded data points are written into the tab (columns: Interval
-                  Start/End, Interval Length, Views in Interval, Cumulative Views).
+                <p className="-mt-1 text-[12.5px] leading-snug text-[#7d7d7d]">
+                  Saving creates a Google Sheet tab named after the title, with the standard headers and
+                  the Instagram link in the Link column. Add the data points later with the Update button.
                 </p>
 
                 {error && <p className="text-[13px] text-[#ff6549]">{error}</p>}
@@ -217,7 +168,7 @@ export default function AddPostModal() {
                 disabled={saving}
                 className="rounded-xl bg-[#ebffa8] px-7 py-2.5 text-[14px] font-bold uppercase tracking-[0.08em] text-[#0d0d0d] transition hover:brightness-95 disabled:opacity-60"
               >
-                {saving ? 'Saving…' : 'Save Post'}
+                {saving ? 'Creating…' : 'Create Post'}
               </button>
             </div>
           </div>

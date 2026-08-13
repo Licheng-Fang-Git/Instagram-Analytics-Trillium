@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import AddPostModal from '@/components/AddPostModal';
+import UpdateDataButton from '@/components/UpdateDataButton';
 import { getNavPosts } from '@/app/compare/actions';
 
 const NAV_ITEMS = [
@@ -173,9 +174,10 @@ export default function Sidebar() {
         </span>
       </div>
 
-      {/* Add Post */}
-      <div className="px-3 pt-3">
+      {/* Add Post + Update Data */}
+      <div className="flex flex-col gap-2 px-3 pt-3">
         <AddPostModal />
+        <UpdateDataButton />
       </div>
 
       {/* Nav */}

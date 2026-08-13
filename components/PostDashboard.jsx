@@ -37,7 +37,7 @@ export default async function PostDashboard({ title, slug, month, metrics, chart
     const min = String(startDate.getMinutes()).padStart(2, '0');
     postDateTime = `${mon} ${startDate.getDate()}, ${startDate.getFullYear()} · ${h}:${min}${ap} ET`;
   }
-
+  console.log(metrics)
 
   return (
     <div className="max-w-[1440px] px-12 pb-[72px] pt-10">

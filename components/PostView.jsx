@@ -24,7 +24,6 @@ async function getGoogleSheetAsCSV(sheetName) {
 export default async function PostView({ slug }) {
   const post = await getPostBySlug(slug);
   if (!post) notFound();
-
   // Posts with a Google Sheet tab render the full growth charts; a summary-only
   // post shows its stat cards from the form-entered metrics.
   let chartData = [];
@@ -35,7 +34,11 @@ export default async function PostView({ slug }) {
     const csv = await getGoogleSheetAsCSV(post.sheetTab);
     const parsed = Papa.parse(csv, { header: true, dynamicTyping: true, skipEmptyLines: true });
     chartData = parsed.data || [];
-    link = chartData[0]?.Link || link;
+    // Metrics come from the Content tab, matched by the post's INSTAGRAM
+    // permalink. Prefer the registry link; only fall back to the sheet's Link
+    // column (which, for scraped posts, holds a business.facebook.com URL that
+    // won't match the Content tab) when the registry has no link.
+    link = post.link || chartData[0]?.Link || null;
     metrics = await getPostMetrics({ post_link: link });
   }
 

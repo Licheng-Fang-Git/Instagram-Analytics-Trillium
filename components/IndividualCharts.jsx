@@ -29,6 +29,33 @@ function dayFloor(ts) {
   return d.getTime();
 }
 
+// Human-readable label for each native "Interval Length" the sheets use.
+const INTERVAL_LABELS = {
+  '0:15': '15 min',
+  '0:30': '30 min',
+  '1:00': '1 hour',
+  '3:00': '3 hours',
+  '6:00': '6 hours',
+  '12:00': '12 hours',
+  '24:00': '24 hours',
+  '24:00:00': '24 hours',
+};
+
+// Group consecutive rows that share the same native interval length (the data is
+// sorted fine → coarse, so each granularity is one contiguous block). Returns
+// { startIdx, endIdx, label } per group — used to draw the x-axis brackets.
+function intervalGroups(rows) {
+  const groups = [];
+  rows.forEach((row, i) => {
+    const raw = String(row['Interval Length'] ?? '').trim();
+    const label = INTERVAL_LABELS[raw] || raw || '—';
+    const last = groups[groups.length - 1];
+    if (last && last.label === label) last.endIdx = i;
+    else groups.push({ startIdx: i, endIdx: i, label });
+  });
+  return groups;
+}
+
 export default function IndividualCharts({ data }) {
   const ASSUMED_YEAR = 2026;
   const chartRef = useRef(null);
@@ -68,6 +95,10 @@ export default function IndividualCharts({ data }) {
     // the bars/points sit on the day-axis ticks.
     const dayBucket = bucket === '24:00:00';
 
+    // For the None bucket, the raw rows change granularity over time (15m → 30m →
+    // … → 24h); group them so we can bracket each granularity under the x-axis.
+    const groups = bucket === 'none' ? intervalGroups(data) : [];
+
     if (bucket === 'none') {
       data.forEach((one_row) => {
         raw_cumulative.push(one_row['Cumulative Views']);
@@ -89,7 +120,7 @@ export default function IndividualCharts({ data }) {
       {
         backgroundColor: 'transparent',
         tooltip: brandTooltip,
-        grid: { top: 40, left: 20, right: 18, bottom: 24, containLabel: true },
+        grid: { top: 40, left: 20, right: 18, bottom: bucket === 'none' ? 58 : 24, containLabel: true },
         xAxis: {
           type: bucket === 'none' ? 'category' : 'time',
           data: bucket === 'none' ? timeEnds : undefined,
@@ -146,6 +177,49 @@ export default function IndividualCharts({ data }) {
             itemStyle: { color: "#00d1ae" },
             lineStyle: { width: 2, color: "#00d1ae" },
           },
+          // Brackets under the x-axis grouping each interval granularity
+          // (15 min → 30 min → … → 24 hours). None bucket only.
+          ...(bucket === 'none'
+            ? [
+                {
+                  type: 'custom',
+                  silent: true,
+                  z: 6,
+                  data: groups.map(() => 0),
+                  renderItem: (params, api) => {
+                    const g = groups[params.dataIndex];
+                    if (!g) return null;
+                    const step = Math.abs(api.coord([1, 0])[0] - api.coord([0, 0])[0]) || 8;
+                    const x0 = api.coord([g.startIdx, 0])[0] - step / 2 + 2;
+                    const x1 = api.coord([g.endIdx, 0])[0] + step / 2 - 2;
+                    const y = api.getHeight() - 30; // band in the bottom margin, below the axis labels
+                    const tick = 5;
+                    const stroke = '#7a7a7a';
+                    return {
+                      type: 'group',
+                      silent: true,
+                      children: [
+                        { type: 'line', shape: { x1: x0, y1: y, x2: x1, y2: y }, style: { stroke, lineWidth: 1 } },
+                        { type: 'line', shape: { x1: x0, y1: y - tick, x2: x0, y2: y }, style: { stroke, lineWidth: 1 } },
+                        { type: 'line', shape: { x1: x1, y1: y - tick, x2: x1, y2: y }, style: { stroke, lineWidth: 1 } },
+                        {
+                          type: 'text',
+                          style: {
+                            text: g.label,
+                            x: (x0 + x1) / 2,
+                            y: y + 3,
+                            textAlign: 'center',
+                            textVerticalAlign: 'top',
+                            fill: '#d0d0d0',
+                            font: `10px ${BRAND.sans}`,
+                          },
+                        },
+                      ],
+                    };
+                  },
+                },
+              ]
+            : []),
         ],
       },
       { notMerge: true }

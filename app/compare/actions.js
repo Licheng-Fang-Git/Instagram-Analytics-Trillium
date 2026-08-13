@@ -4,7 +4,7 @@ import Papa from 'papaparse';
 import { normalizeRows, parseTs } from '@/lib/chartAggregation';
 import { getPostMetrics } from '@/app/content.js';
 import { getAllPosts, getPostByCode, addPost, postHref, setPostSheetTab } from '@/lib/postsRegistry';
-import { sheetsConfigured, createPostTab } from '@/lib/googleSheets';
+import { sheetsConfigured, createPostTab, pushScrapedData } from '@/lib/googleSheets';
 
 // Registry-derived { code: sheetTab } for every post that carries a time-series
 // sheet tab. This is the single source of truth — new posts added through the
@@ -36,37 +36,39 @@ export async function getNavPosts() {
     }));
 }
 
-// Parse an uploaded Excel/CSV (base64) into an array of row objects keyed by
-// header. Loaded lazily so the xlsx parser isn't bundled unless a file is sent.
-async function parseSpreadsheetBase64(b64) {
-    if (!b64) return [];
+// Update Google Sheet tabs from the scraper's JSON (a { "Tab Name": [rows] }
+// map). Replaces each existing tab's data rows; skips tabs not in the sheet.
+export async function updateSheets(jsonText) {
+    if (!sheetsConfigured()) {
+        return { error: 'Google Sheets is not configured on the server (GOOGLE_SERVICE_ACCOUNT_B64 missing).' };
+    }
+    let dataMap;
     try {
-        const XLSX = await import('xlsx');
-        const buf = Buffer.from(b64, 'base64');
-        const wb = XLSX.read(buf, { type: 'buffer' });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        return ws ? XLSX.utils.sheet_to_json(ws, { defval: '' }) : [];
+        dataMap = JSON.parse(jsonText);
+    } catch {
+        return { error: 'That file is not valid JSON.' };
+    }
+    try {
+        const result = await pushScrapedData(dataMap);
+        return result;
     } catch (e) {
-        console.error('Failed to parse uploaded spreadsheet:', e);
-        return [];
+        return { error: String(e?.message || e) };
     }
 }
 
 // Create a post from the Add Post form. When Google Sheets is configured, this
-// also AUTO-CREATES a tab for the post: it writes the Instagram link into the
-// Link column and, if an Excel/CSV was uploaded, its data points into the tab.
-// Returns the new post's href so the client can route straight to its page.
+// also AUTO-CREATES a tab named after the post's TITLE, with the standard header
+// row and the Instagram link in the Link column. The data points are added later
+// via the Update button. Returns the new post's href.
 export async function createPost(input) {
     const entry = await addPost({ ...input, createdAt: new Date().toISOString() });
 
-    // Auto-provision the post's Google Sheet tab (link + uploaded data points).
     if (sheetsConfigured()) {
-        const tabName = (input.sheetTab || '').trim() || entry.slug;
+        const tabName = entry.title.trim();
         try {
-            const rows = await parseSpreadsheetBase64(input.excelBase64);
-            await createPostTab({ tabName, link: input.link, rows });
+            await createPostTab({ tabName, link: input.link, rows: [] });
             // Point the registry at the tab so the app reads the data back.
-            if (entry.sheetTab !== tabName) await setPostSheetTab(entry.slug, tabName);
+            await setPostSheetTab(entry.slug, tabName);
             entry.sheetTab = tabName;
         } catch (e) {
             console.error('Google Sheet tab creation failed:', e);
@@ -210,7 +212,9 @@ export async function getPostSummary(postCode) {
         skipEmptyLines: true,
     });
 
-    const link = data[0]?.Link?.trim() || null;
+    // Prefer the registry's Instagram permalink (the sheet's Link column holds a
+    // business.facebook.com URL for scraped posts, which won't match Content).
+    const link = entry.link || data[0]?.Link?.trim() || null;
     const metrics = await getPostMetrics({ post_link: link });
 
     // Daily ad-boost entries. The organic view series is left untouched — ad
@@ -264,15 +268,29 @@ export async function getAllPostSummaries() {
     const parse = (csv) =>
         csv ? Papa.parse(csv, { header: true, dynamicTyping: true, skipEmptyLines: true }).data : [];
 
+    // Content headers carry trailing spaces ("Permalink ", "Views "…) — trim
+    // them, then index by Instagram permalink for fast per-post lookup.
     const contentCsv = await getGoogleSheetAsCSV(SPREADSHEET_ID, 'Content');
-    const content = parse(contentCsv);
+    const content = contentCsv
+        ? Papa.parse(contentCsv, { header: true, dynamicTyping: true, skipEmptyLines: true, transformHeader: (h) => h.trim() }).data
+        : [];
+    const byPermalink = new Map();
+    for (const r of content) {
+        const pl = String(r['Permalink'] ?? '').trim();
+        if (pl) byPermalink.set(pl, r);
+    }
     const num = (v) => Number(v) || 0;
+
+    // Registry links (the real Instagram permalinks) keyed by post code.
+    const linkByCode = new Map((await getAllPosts()).map((p) => [p.code, p.link]));
 
     const entries = await Promise.all(
         Object.entries(await postFilesMap()).map(async ([code, sheetName]) => {
             const data = parse(await getGoogleSheetAsCSV(SPREADSHEET_ID, sheetName));
-            const link = data[0]?.Link?.trim() || null;
-            const row = link ? content.find((r) => r['Permalink'] === link) : null;
+            // Prefer the registry's Instagram permalink; the sheet's Link column
+            // holds a business.facebook.com URL for scraped posts (won't match).
+            const link = linkByCode.get(code) || data[0]?.Link?.trim() || null;
+            const row = link ? byPermalink.get(String(link).trim()) : null;
             return {
                 code,
                 link,
@@ -281,7 +299,7 @@ export async function getAllPostSummaries() {
                 likes: num(row?.['Likes']),
                 shares: num(row?.['Shares']),
                 follows: num(row?.['Follows']),
-                comments: num(row?.['Comments']),
+                comments: num(row?.['Comment']),
                 saves: num(row?.['Saves']),
             };
         })

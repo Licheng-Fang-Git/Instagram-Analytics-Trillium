@@ -204,14 +204,36 @@
     "createdAt": "2026-08-12T18:25:38.986Z"
   },
   {
-    "code": "yuxins_spotlight",
-    "slug": "yuxins_spotlight",
-    "title": "Yuxin's Spotlight",
+    "code": "yuxin_spotlight",
+    "slug": "yuxin_spotlight",
+    "title": "Yuxin Spotlight",
     "month": "August",
     "year": 2026,
     "datePosted": "2026-08-11",
     "link": "https://www.instagram.com/p/Db5-Lq_FYbP/",
-    "sheetTab": "Yuxin-Spotlight",
-    "createdAt": "2026-08-12T19:43:46.394Z"
+    "sheetTab": "Yuxin Spotlight",
+    "createdAt": "2026-08-13T17:52:25.689Z"
+  },
+  {
+    "code": "who_s_most_likely_to",
+    "slug": "who_s_most_likely_to",
+    "title": "Who’s Most Likely To",
+    "month": "August",
+    "year": 2026,
+    "datePosted": "2026-08-06",
+    "link": "https://www.instagram.com/reel/DbtMn8cRwN2/",
+    "sheetTab": "Who’s Most Likely To",
+    "createdAt": "2026-08-13T18:59:25.502Z"
+  },
+  {
+    "code": "full_time_equity_trader_application_2027",
+    "slug": "full_time_equity_trader_application_2027",
+    "title": "Full Time Equity Trader Application 2027",
+    "month": "August",
+    "year": 2026,
+    "datePosted": "2026-08-12",
+    "link": "https://www.instagram.com/p/Db8i7WYm0BU/",
+    "sheetTab": "Full Time Equity Trader Application 2027",
+    "createdAt": "2026-08-13T19:54:06.494Z"
   }
 ]
