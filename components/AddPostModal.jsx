@@ -65,15 +65,20 @@ export default function AddPostModal() {
     setSaving(true);
     setError('');
     try {
-      const { href } = await createPost({
+      const res = await createPost({
         title: form.title.trim(),
         link: form.link,
         datePosted: form.datePosted,
       });
+      if (res?.error) {
+        setError(res.error);
+        setSaving(false);
+        return;
+      }
       // Full-page load to the new post's page (organized under /{year}/{month}/…).
       // A hard reload re-runs the sidebar's registry fetch, so the new post shows
       // up in the nav tree — a client-side push would leave the sidebar stale.
-      window.location.assign(href);
+      window.location.assign(res.href);
     } catch (e) {
       setError('Could not save the post. Please try again.');
       setSaving(false);

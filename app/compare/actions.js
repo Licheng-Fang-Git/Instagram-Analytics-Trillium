@@ -61,7 +61,15 @@ export async function updateSheets(jsonText) {
 // row and the Instagram link in the Link column. The data points are added later
 // via the Update button. Returns the new post's href.
 export async function createPost(input) {
-    const entry = await addPost({ ...input, createdAt: new Date().toISOString() });
+    // Return failures as data ({ error }) rather than throwing — Next.js redacts
+    // thrown server-action errors in production, which hides the real reason.
+    let entry;
+    try {
+        entry = await addPost({ ...input, createdAt: new Date().toISOString() });
+    } catch (e) {
+        console.error('Add post failed:', e);
+        return { error: String(e?.message || e) };
+    }
 
     if (sheetsConfigured()) {
         const tabName = entry.title.trim();
